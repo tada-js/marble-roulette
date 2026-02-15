@@ -25,6 +25,7 @@ export function makeBoard({
   heightMultiplier = 1,
   elementScale = 1,
   corridorEnabled = true,
+  customRotors = null, // zigzag: user-provided extra circular rotors
   layout = "classic" // classic | roulette | zigzag
 } = {}) {
   const baseH = worldH;
@@ -46,7 +47,7 @@ export function makeBoard({
 
   // Fixed map layouts: polylines + boxes + optional propellers (no procedural pegs).
   const roulette = layout === "roulette" ? makeRouletteLayout({ worldW, worldH, slotH }) : null;
-  const zigzag = layout === "zigzag" ? makeZigzagLayout({ worldW, worldH, slotH, ballR }) : null;
+  const zigzag = layout === "zigzag" ? makeZigzagLayout({ worldW, worldH, slotH, ballR, customRotors }) : null;
   const fixed = roulette || zigzag;
   const wallSegments = fixed ? buildWallSegments(fixed.entities) : [];
   const wallBins = wallSegments.length ? buildSegmentBins(wallSegments, 260) : null;
@@ -81,7 +82,7 @@ export function makeBoard({
       idx: i,
       x0: i * slotW,
       x1: (i + 1) * slotW,
-      label: `S${i + 1}`
+      label: slotCount === 1 ? "" : `S${i + 1}`
     });
   }
 
@@ -125,20 +126,12 @@ export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog =
     stats: {
       propellerContacts: 0
     },
-    chaos: {
-      enabled: true,
-      fixed: true,
-      rng: makeRng((seed ^ 0xa8f1d2c3) >>> 0),
-      bumpers: [],
-      spinners: [],
-      portals: [],
-      windZones: []
-    },
     pending: [],
     released: false,
     totalToDrop: 0,
     finished: [],
     winner: null,
+    _binCounts: Array.from({ length: board.slotCount }, () => 0),
     dropX: board.worldW / 2,
     marbles: [],
     lastResult: null
@@ -207,8 +200,7 @@ export function startGame(state) {
   state.winner = null;
   state.released = false;
   state.stats.propellerContacts = 0;
-  state.chaos.rng = makeRng((state.seed ^ 0xa8f1d2c3) >>> 0);
-  if (state.chaos.enabled) generateChaosObjects(state);
+  state._binCounts = Array.from({ length: state.board.slotCount }, () => 0);
 
   const queue = prepareDropQueue(state, { shuffle: true });
   state.totalToDrop = queue.length;
@@ -227,10 +219,7 @@ export function resetGame(state) {
   state.finished = [];
   state.winner = null;
   state.stats.propellerContacts = 0;
-  state.chaos.bumpers = [];
-  state.chaos.spinners = [];
-  state.chaos.portals = [];
-  state.chaos.windZones = [];
+  state._binCounts = Array.from({ length: state.board.slotCount }, () => 0);
 }
 
 export function dropAll(state) {
@@ -252,15 +241,17 @@ export function step(state, dt) {
 
   // Heavier feel: lower gravity, lower bounciness, and more damping.
   // Tuning goal: slower, heavier motion. We trade a bit of "pinball pop" for more weight.
-  const g = 900; // px/s^2 in world units
+  // Slightly slower feel: lower gravity + a bit more damping + lower max speed.
+  const g = 720; // px/s^2 in world units
   const restitution = 0.26;
-  const air = 0.982;
-  const maxV = 1350;
+  const air = 0.976;
+  const maxV = 1120;
 
   const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY, corridor, wallSegments, wallBins, zigzag } =
     state.board;
   const finishY = worldH - slotH;
   const propellers = zigzag?.propellers || null;
+  const rotors = zigzag?.rotors || null;
 
   // Prevent tunneling through thin walls when many marbles pile up by sub-stepping.
   // Keep this capped to avoid exploding CPU cost for large counts.
@@ -284,15 +275,6 @@ export function step(state, dt) {
     for (const m of state.marbles) {
       if (m.done) continue;
 
-      // Chaos: wind zones (adds horizontal acceleration).
-      if (state.chaos.enabled && state.chaos.windZones.length) {
-        for (const z of state.chaos.windZones) {
-          if (m.x < z.x0 || m.x > z.x1 || m.y < z.y0 || m.y > z.y1) continue;
-          const phase = z.phase + state.t * z.freq;
-          m.vx += Math.sin(phase) * z.ax * dtSub;
-        }
-      }
-
       m.vy += g * dtSub;
       m.vx *= air;
       m.vy *= air;
@@ -311,13 +293,48 @@ export function step(state, dt) {
       // Finish line -> slot result.
       if (m.y + m.r >= finishY) {
         const idx = clampInt(Math.floor(m.x / slotW), 0, slots.length - 1);
-        m.done = true;
-        m.result = { slot: idx, label: slots[idx].label };
-        state.lastResult = { marbleId: m.id, ballId: m.ballId, ...m.result };
-        state.finished.push({ marbleId: m.id, ballId: m.ballId, t: state.t, ...m.result });
-        m.y = finishY - m.r;
+        const n = (state._binCounts?.[idx] ?? 0) | 0;
+        if (!m.result) {
+          // If there is only one finish slot, treat "label" as arrival order.
+          const order = n + 1;
+          const label = slots.length === 1 ? String(order) : slots[idx].label;
+          m.result = { slot: idx, label };
+          state.lastResult = { marbleId: m.id, ballId: m.ballId, ...m.result };
+          state.finished.push({ marbleId: m.id, ballId: m.ballId, t: state.t, ...m.result });
+        }
+
+        // Immediately place into a deterministic pile inside the slot, so the bottom is visibly "filled".
+        const slot = slots[idx];
+        const zonePadBase = 22; // aligns with render.js slot zone inset
+        const zonePad = Math.max(zonePadBase, m.r * 0.75);
+        const zoneX0 = slot.x0 + zonePad;
+        const zoneX1 = slot.x1 - zonePad;
+        const slotTopY = worldH - slotH;
+        const zoneY0 = slotTopY + zonePadBase; // top inset
+        const zoneY1 = worldH - zonePadBase; // bottom inset
+
+        const dx = Math.max(1, m.r * 2.18);
+        const dy = Math.max(1, m.r * 2.08);
+        const usableW = Math.max(1, zoneX1 - zoneX0);
+        const cols = clampInt(Math.floor(usableW / dx), 1, 24);
+        const row = Math.floor(n / cols);
+        const col = n % cols;
+
+        // Fill left->right, then next row (top->down). If we exceed slot height, overflow stacks upward above the slot.
+        const maxRowsInSlot = Math.max(1, Math.floor(Math.max(1, (zoneY1 - zoneY0)) / dy));
+        let y = zoneY0 + m.r + row * dy;
+        if (row >= maxRowsInSlot) {
+          const overflow = row - (maxRowsInSlot - 1);
+          y = zoneY0 + m.r - overflow * dy;
+        }
+        const x = zoneX0 + m.r + col * dx;
+        m.x = clamp(x, zoneX0 + m.r, zoneX1 - m.r);
+        m.y = y;
+
+        if (state._binCounts && idx >= 0 && idx < state._binCounts.length) state._binCounts[idx] = n + 1;
         m.vx = 0;
         m.vy = 0;
+        m.done = true;
       }
     }
 
@@ -391,9 +408,9 @@ export function step(state, dt) {
           }
         }
 
-        // Chaos: bumpers/spinners/portals (check near Y only).
-        if (state.chaos.enabled) {
-          applyChaosCollisions(state, m, restitution);
+        // Zigzag layout: early circular rotors near the start.
+        if (rotors && rotors.length) {
+          for (const r of rotors) resolveRotor(state, m, r, restitution);
         }
       }
 
@@ -499,13 +516,6 @@ export function snapshotForText(state) {
     finishedCount: state.finished.length,
     winner: state.winner,
     dropX: Number(state.dropX.toFixed(1)),
-    chaos: {
-      enabled: state.chaos.enabled,
-      bumpers: state.chaos.bumpers.length,
-      spinners: state.chaos.spinners.length,
-      portals: state.chaos.portals.length,
-      windZones: state.chaos.windZones.length
-    },
     board: {
       worldW: b.worldW,
       worldH: b.worldH,
@@ -660,273 +670,6 @@ function settleMarbles(state, iterations) {
   }
 }
 
-function generateChaosObjects(state) {
-  const b = state.board;
-  const corridor = b.corridor;
-  const boundsAtY = (y) => {
-    if (b.layout === "roulette" && b.roulette?.spawnBoundsAtY) {
-      const bb = b.roulette.spawnBoundsAtY(y);
-      return { left: Number(bb.left), right: Number(bb.right) };
-    }
-    if (corridor) return corridorAt(corridor, y);
-    return { left: 0, right: b.worldW };
-  };
-
-  // Fixed chaos layout (no randomness) to avoid jams.
-  if (state.chaos.fixed) {
-    const bumpers = [];
-    const spinners = [];
-    const portals = [];
-    const windZones = [];
-
-    const yStart = b.topPad + b.pegGapY * 6;
-    const yEnd = b.worldH - b.slotH - 320;
-    const ys = [lerp(yStart, yEnd, 0.18), lerp(yStart, yEnd, 0.42), lerp(yStart, yEnd, 0.68)];
-
-    const margin = b.ballR * 3.2;
-    const placeCircle = (y, r, prefFrac) => {
-      const { left, right } = boundsAtY(y);
-      const prefX = lerp(left + margin, right - margin, prefFrac);
-      return findSafePointForCircle(state, prefX, y, r, margin);
-    };
-
-    // 2 bumpers, 1 spinner, 1 portal pair, 1 wind band: enough variety without clogging.
-    {
-      const r = b.ballR * 1.15;
-      const p1 = placeCircle(ys[0], r, 0.35);
-      const p2 = placeCircle(ys[1], r, 0.65);
-      if (p1) bumpers.push({ kind: "bumper", x: p1.x, y: p1.y, r, strength: 520 });
-      if (p2) bumpers.push({ kind: "bumper", x: p2.x, y: p2.y, r, strength: 520 });
-    }
-
-    {
-      const r = b.ballR * 1.25;
-      const p = placeCircle(ys[1], r, 0.50);
-      if (p) spinners.push({ kind: "spinner", x: p.x, y: p.y, r, tangential: 360, dir: 1 });
-    }
-
-    {
-      const r = b.ballR * 1.35;
-      const a = placeCircle(ys[0], r, 0.62);
-      const bb = placeCircle(ys[2], r, 0.38);
-      if (a && bb) {
-        portals.push({
-          kind: "portal",
-          a: { x: a.x, y: a.y, r },
-          b: { x: bb.x, y: bb.y, r }
-        });
-      }
-    }
-
-    // Wind band around mid-late, full available width.
-    {
-      const y0 = lerp(yStart, yEnd, 0.78);
-      const y1 = y0 + b.pegGapY * 5.5;
-      const { left, right } = boundsAtY((y0 + y1) / 2);
-      windZones.push({
-        kind: "wind",
-        x0: left,
-        x1: right,
-        y0,
-        y1,
-        ax: 220,
-        freq: 0.95,
-        phase: 0
-      });
-    }
-
-    state.chaos.bumpers = bumpers;
-    state.chaos.spinners = spinners;
-    state.chaos.portals = portals;
-    state.chaos.windZones = windZones;
-    return;
-  }
-
-  const rnd = state.chaos.rng;
-  const bumpers = [];
-  const spinners = [];
-  const portals = [];
-  const windZones = [];
-
-  // Keep the spawn/top area cleaner.
-  const yStart = b.topPad + b.pegGapY * 4;
-  const yEnd = b.worldH - b.slotH - 220;
-
-  const bumperCount = Math.max(8, Math.round((b.rows / 16) * 12));
-  for (let i = 0; i < bumperCount; i++) {
-    const y = lerp(yStart, yEnd, (i + 1) / (bumperCount + 1)) + (rnd() - 0.5) * b.pegGapY * 2.5;
-    if (corridor && isClearZone(corridor, y)) continue;
-    const { left, right } = boundsAtY(y);
-    const x = lerp(left + 40, right - 40, rnd());
-    bumpers.push({
-      kind: "bumper",
-      x,
-      y,
-      r: b.ballR * 1.35,
-      strength: 420 + rnd() * 520
-    });
-  }
-
-  const spinnerCount = Math.max(6, Math.round((b.rows / 16) * 10));
-  for (let i = 0; i < spinnerCount; i++) {
-    const y = lerp(yStart, yEnd, (i + 0.5) / spinnerCount) + (rnd() - 0.5) * b.pegGapY * 2.0;
-    if (corridor && isClearZone(corridor, y)) continue;
-    const { left, right } = boundsAtY(y);
-    const x = lerp(left + 40, right - 40, rnd());
-    spinners.push({
-      kind: "spinner",
-      x,
-      y,
-      r: b.ballR * 1.55,
-      tangential: 320 + rnd() * 380,
-      dir: rnd() < 0.5 ? -1 : 1
-    });
-  }
-
-  // One portal pair, mid-ish and low-ish.
-  const pyA = lerp(yStart, yEnd, 0.35);
-  const pyB = lerp(yStart, yEnd, 0.72);
-  const yA = corridor && isClearZone(corridor, pyA) ? pyA - b.pegGapY * 4 : pyA;
-  const yB = corridor && isClearZone(corridor, pyB) ? pyB + b.pegGapY * 4 : pyB;
-  const ca = boundsAtY(yA);
-  const cb = boundsAtY(yB);
-  const pxA = lerp(ca.left + 60, ca.right - 60, 0.22 + rnd() * 0.25);
-  const pxB = lerp(cb.left + 60, cb.right - 60, 0.55 + rnd() * 0.25);
-  portals.push({
-    kind: "portal",
-    a: { x: pxA, y: yA, r: b.ballR * 1.6 },
-    b: { x: pxB, y: yB, r: b.ballR * 1.6 }
-  });
-
-  // Wind bands.
-  const windCount = 4;
-  for (let i = 0; i < windCount; i++) {
-    const y0 = lerp(yStart, yEnd, (i + 0.2) / windCount);
-    const y1 = y0 + b.pegGapY * (3.5 + rnd() * 3.5);
-    // Avoid clear zones; user wants to add their own objects there.
-    if (corridor && (isClearZone(corridor, y0) || isClearZone(corridor, y1))) continue;
-    const c0 = boundsAtY((y0 + y1) / 2);
-    windZones.push({
-      kind: "wind",
-      x0: c0.left,
-      x1: c0.right,
-      y0,
-      y1,
-      ax: 220 + rnd() * 420,
-      freq: 0.8 + rnd() * 0.9,
-      phase: rnd() * Math.PI * 2
-    });
-  }
-
-  state.chaos.bumpers = bumpers;
-  state.chaos.spinners = spinners;
-  state.chaos.portals = portals;
-  state.chaos.windZones = windZones;
-}
-
-function applyChaosCollisions(state, m, restitution) {
-  const b = state.board;
-  const rnd = state.chaos.rng;
-  const yMin = m.y - m.r - 160;
-  const yMax = m.y + m.r + 160;
-
-  // Bumpers: radial boost.
-  for (const o of state.chaos.bumpers) {
-    if (o.y < yMin || o.y > yMax) continue;
-    const dx = m.x - o.x;
-    const dy = m.y - o.y;
-    const sumR = m.r + o.r;
-    const d2 = dx * dx + dy * dy;
-    if (d2 >= sumR * sumR || d2 === 0) continue;
-    const d = Math.sqrt(d2);
-    const nx = dx / d;
-    const ny = dy / d;
-    const push = sumR - d;
-    m.x += nx * push;
-    m.y += ny * push;
-    const vn = m.vx * nx + m.vy * ny;
-    if (vn < 0) {
-      m.vx -= (1 + restitution) * vn * nx;
-      m.vy -= (1 + restitution) * vn * ny;
-    }
-    const jitter = state.chaos.fixed ? 1 : 0.8 + rnd() * 0.6;
-    m.vx += nx * o.strength * jitter;
-    // Bias down a bit so it doesn't "stick" upwards against walls.
-    m.vy = Math.max(m.vy + ny * o.strength * jitter, 40);
-  }
-
-  // Spinners: tangential impulse.
-  for (const o of state.chaos.spinners) {
-    if (o.y < yMin || o.y > yMax) continue;
-    const dx = m.x - o.x;
-    const dy = m.y - o.y;
-    const sumR = m.r + o.r;
-    const d2 = dx * dx + dy * dy;
-    if (d2 >= sumR * sumR || d2 === 0) continue;
-    const d = Math.sqrt(d2);
-    const nx = dx / d;
-    const ny = dy / d;
-    const push = sumR - d;
-    m.x += nx * push;
-    m.y += ny * push;
-    // Tangential direction (-ny, nx)
-    const tx = -ny * o.dir;
-    const ty = nx * o.dir;
-    const kick = o.tangential * (state.chaos.fixed ? 1 : 0.7 + rnd() * 0.6);
-    m.vx += tx * kick;
-    m.vy += ty * kick;
-  }
-
-  // Portals: teleport with cooldown.
-  const cd = 0.45;
-  if (typeof m._portalCdT !== "number") m._portalCdT = -999;
-  if (state.t - m._portalCdT < cd) return;
-  for (const p of state.chaos.portals) {
-    const hitA = circleHit(m, p.a);
-    const hitB = circleHit(m, p.b);
-    if (!hitA && !hitB) continue;
-    const to = hitA ? p.b : p.a;
-    // Place at destination with small offset.
-    const ang = state.chaos.fixed ? (hash01(m.id) * Math.PI * 2) : rnd() * Math.PI * 2;
-    const desiredX = to.x + Math.cos(ang) * (m.r + 4);
-    m.y = clamp(to.y + Math.sin(ang) * (m.r + 4), m.r + 2, b.worldH - b.slotH - m.r - 2);
-    const spawnBoundsAtY =
-      b.layout === "roulette"
-        ? b.roulette?.spawnBoundsAtY
-        : b.layout === "zigzag"
-          ? b.zigzag?.spawnBoundsAtY
-          : null;
-    if (spawnBoundsAtY) {
-      const bb = spawnBoundsAtY(m.y);
-      const left = Number(bb.left);
-      const right = Number(bb.right);
-      m.x = clamp(desiredX, left + m.r + 2, right - m.r - 2);
-    } else if (b.corridor) {
-      const { left, right } = corridorAt(b.corridor, m.y);
-      m.x = clamp(desiredX, left + m.r + 2, right - m.r - 2);
-    } else {
-      m.x = clamp(desiredX, m.r + 2, b.worldW - m.r - 2);
-    }
-    // Add velocity jitter so it doesn't feel scripted.
-    if (state.chaos.fixed) {
-      m.vx = m.vx * 0.55 + (hash01(m.id + ":vx") - 0.5) * 180;
-      m.vy = Math.max(0, m.vy * 0.35) + hash01(m.id + ":vy") * 90;
-    } else {
-      m.vx = (m.vx * 0.55) + (rnd() - 0.5) * 520;
-      m.vy = Math.max(0, m.vy * 0.35) + rnd() * 160;
-    }
-    m._portalCdT = state.t;
-    break;
-  }
-}
-
-function circleHit(m, c) {
-  const dx = m.x - c.x;
-  const dy = m.y - c.y;
-  const sumR = m.r + c.r;
-  return dx * dx + dy * dy < sumR * sumR;
-}
-
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
@@ -974,7 +717,7 @@ function smoothstep(x) {
   return t * t * (3 - 2 * t);
 }
 
-function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18 }) {
+function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = null }) {
   const padX = 32;
   const topY = 40;
   const spawnY = topY + 70;
@@ -1021,7 +764,9 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18 }) {
     k(0.80, 0.60, narrowHalfB),
     k(0.86, 0.40, narrowHalfB),
     k(0.92, 0.62, narrowHalfB),
-    k(1.00, 0.50, narrowHalfB)
+    // Funnel toward the exits near the bottom.
+    k(0.96, 0.50, clamp(Math.max(ballR * 4.2, 92), 72, narrowHalfB * 0.92)),
+    k(1.00, 0.50, clamp(Math.max(ballR * 3.6, 78), 60, narrowHalfB * 0.82))
   ];
 
   function profileAt(y) {
@@ -1053,52 +798,209 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18 }) {
     { id: "top-cap", type: "polyline", points: [[left[0][0], topY], [right[0][0], topY]] }
   ];
 
-  // Propeller in the mixing chamber.
-  const mixY0 = ky(0.60);
-  const mixY1 = ky(0.76);
-  const mixY = (mixY0 + mixY1) / 2;
-  const { cx, hw } = profileAt(mixY);
-  // Leave some side clearance so marbles can bypass the blades.
-  const propLen = Math.max(240, hw * 1.55);
-  // Early propeller near the start (inside the wide corridor) to reshuffle early,
-  // but tuned to never "trap" marbles: multiple smaller blades across the corridor, gentler rotation,
-  // and no tangential shove.
-  const earlyY = ky(0.135);
-  const early = profileAt(earlyY);
-  const earlyClear = Math.max(ballR * 1.7 + 14, 40);
-  const earlyLeft = early.cx - early.hw + earlyClear;
-  const earlyRight = early.cx + early.hw - earlyClear;
-  const earlyW = Math.max(0, earlyRight - earlyLeft);
-  // Choose a fixed count based on available width, capped for stability/perf.
-  const earlyCount = clampInt(Math.floor(earlyW / Math.max(160, ballR * 7.2)), 3, 6);
-  const cellW = earlyW / earlyCount;
-  const earlyLen = clamp(cellW * 0.92, 120, cellW * 1.05);
+  // Early circular rotors at the start (kept for early interaction).
+  const rotors = [];
+  {
+    const yA = ky(0.095);
+    const yB = ky(0.112);
+    const pA = profileAt(yA);
+    const leftA = clamp(pA.cx - pA.hw, padX, worldW - padX);
+    const rightA = clamp(pA.cx + pA.hw, padX, worldW - padX);
+    const margin = Math.max(ballR * 1.8, 44);
+    const x0 = leftA + margin;
+    const x1 = rightA - margin;
+    const availW = Math.max(0, x1 - x0);
 
-  const propellers = [];
-  for (let i = 0; i < earlyCount; i++) {
-    const x = earlyLeft + cellW * (i + 0.5);
-    // Alternate rotation direction so the gate doesn't bias all marbles the same way.
-    const dir = i % 2 ? -1 : 1;
-    propellers.push({
-      x,
-      y: earlyY,
-      len: earlyLen,
-      omega: dir * 0.85,
-      phase: (Math.PI / 8) * i,
-      mix: 0,
-      down: 78,
-      maxUp: 0,
-      bounce: 0.03,
-      maxSurf: 240
-    });
+    const nA = 7;
+    const nB = 6;
+    const gap = Math.max(ballR * 4.0, 56); // ~2 balls can pass
+    const dy = Math.abs(yB - yA);
+    const vGap = Math.max(2, ballR * 0.28);
+    const maxR_V = (dy - vGap) / 2;
+    const maxR_A = (availW - gap * (nA - 1)) / (2 * nA);
+    const maxR_B = (availW - gap * (nB - 1)) / (2 * nB);
+    const r = clamp(Math.min(maxR_V, maxR_A, maxR_B) * 0.98, ballR * 0.45, ballR * 0.90);
+    if (r > ballR * 0.40) {
+      const stepA = (availW - 2 * r) / (nA - 1);
+      const stepB = (availW - 2 * r) / (nB - 1);
+      for (let i = 0; i < nA; i++) {
+        const x = x0 + r + i * stepA;
+        rotors.push({
+          x,
+          y: yA,
+          r,
+          omega: (i % 2 ? -1 : 1) * 12.5,
+          maxSurf: 560,
+          bounce: 0.28,
+          kick: 190,
+          dampT: 0.02,
+          down: 18,
+          maxUp: 0
+        });
+      }
+      for (let i = 0; i < nB; i++) {
+        const x = x0 + r + i * stepB;
+        rotors.push({
+          x,
+          y: yB,
+          r,
+          omega: ((i + 1) % 2 ? -1 : 1) * 12.5,
+          maxSurf: 560,
+          bounce: 0.28,
+          kick: 190,
+          dampT: 0.02,
+          down: 18,
+          maxUp: 0
+        });
+      }
+    }
   }
 
-  // Single rotating bar: mixes but still lets marbles drain without getting trapped behind a "cross".
-  propellers.push({ x: cx, y: mixY, len: propLen, omega: 1.1, phase: 0, mix: 8, down: 18, maxUp: 110, maxSurf: 520 });
+  // Zigzag: add straight propellers right after each bend to create interaction
+  // without extra object systems.
+  const propellers = [];
+  let turnIdx = 0;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i];
+    const b = keys[i + 1];
+    if (Math.abs(a.cx - b.cx) < 1e-3) continue;
+    const y = lerp(a.y, b.y, 0.45);
+    const prof = profileAt(y);
+    // Make bars longer for more interaction, but never long enough to touch the walls.
+    // Since the bar rotates, use a conservative max length based on corridor half-width.
+    const clearance = Math.max(ballR * 2.6, 54);
+    const maxLen = Math.max(80, (prof.hw - clearance) * 2);
+    const wantLen = clamp(prof.hw * 1.95, 180, 640);
+    const len = Math.max(80, Math.min(wantLen, maxLen));
+    const dir = turnIdx % 2 ? -1 : 1;
+    propellers.push({
+      x: prof.cx,
+      y,
+      len,
+      omega: dir * 1.05,
+      phase: (Math.PI / 10) * turnIdx,
+      mix: 7,
+      down: 26,
+      maxUp: 120,
+      maxSurf: 520,
+      bounce: 0.06
+    });
+    turnIdx++;
+  }
+
+  // Exit propellers (hand-tuned): spaced so they don't visually overlap while rotating.
+  // Fractions are of worldH/worldW (matches the user's coordinate pick tool).
+  {
+    const xFrac = 0.497;
+    const yFracs = [0.966, 0.976, 0.985]; // upper -> lower
+    for (let i = 0; i < yFracs.length; i++) {
+      const y = worldH * yFracs[i];
+      const prof = profileAt(y);
+      const clearance = Math.max(ballR * 2.9, 62);
+      const maxLen = Math.max(120, (prof.hw - clearance) * 2);
+      const left = clamp(prof.cx - prof.hw, padX, worldW - padX);
+      const right = clamp(prof.cx + prof.hw, padX, worldW - padX);
+      const xWant = worldW * xFrac;
+      const x = clamp(xWant, left + clearance, right - clearance);
+
+      // Keep them a bit shorter near the exit so three bars can coexist.
+      const wantLen = clamp(prof.hw * 1.72, 220, 620);
+      const len = Math.max(120, Math.min(wantLen, maxLen * 0.92));
+      const dir = i % 2 ? -1 : 1;
+      propellers.push({
+        x,
+        y,
+        len,
+        omega: dir * (1.35 + i * 0.22),
+        phase: (Math.PI * 2 * i) / 3,
+        mix: 12,
+        down: 10,
+        maxUp: 180,
+        maxSurf: 740,
+        bounce: 0.10
+      });
+    }
+  }
+
+  // Mid-section rotors (auto): sprinkle a few circular rotors between bar propellers.
+  // If the user provides `customRotors`, skip auto-rotors so placements are deterministic.
+  if (!Array.isArray(customRotors) || customRotors.length === 0) {
+    const rBase = clamp(ballR * 0.78, ballR * 0.55, ballR * 0.95);
+    const maxAdd = Math.max(16, Math.min(24, Math.round(worldH / 900) * 8));
+    let added = 0;
+    let lastY = -Infinity;
+    const minDY = Math.max(ballR * 7.2, 120);
+    for (let i = 0; i < propellers.length && added < maxAdd; i++) {
+      // Skip the last two (exit flippers) to keep the bottom readable.
+      if (i >= Math.max(0, propellers.length - 2)) break;
+      const y = propellers[i].y + (i % 2 ? 56 : 86);
+      if (y < spawnY + 140 || y > worldH - slotH - 260) continue;
+      if (y - lastY < minDY) continue;
+      const prof = profileAt(y);
+      const margin = Math.max(ballR * 4.2, 120);
+      const left = clamp(prof.cx - prof.hw, padX, worldW - padX);
+      const right = clamp(prof.cx + prof.hw, padX, worldW - padX);
+      const avail = Math.max(0, (right - left) - margin * 2);
+      if (avail < rBase * 2.6) continue;
+      const dir = added % 2 ? -1 : 1;
+      const x = clamp(
+        prof.cx + dir * Math.min(prof.hw * (0.30 + 0.06 * ((added % 3) - 1)), avail * 0.40),
+        left + margin,
+        right - margin
+      );
+      rotors.push({
+        x,
+        y,
+        r: rBase,
+        omega: (added % 2 ? -1 : 1) * (10.5 + (added % 4) * 0.6),
+        maxSurf: 620,
+        bounce: 0.07,
+        dampT: 0.02,
+        down: 16,
+        maxUp: 20
+      });
+      added++;
+      lastY = y;
+    }
+  }
+
+  // User-provided rotors (hand-tuned placements).
+  if (Array.isArray(customRotors) && customRotors.length) {
+    for (const cr of customRotors) {
+      if (!cr) continue;
+      const x =
+        typeof cr.x === "number"
+          ? cr.x
+          : typeof cr.xFrac === "number"
+            ? cr.xFrac * worldW
+            : null;
+      const y =
+        typeof cr.y === "number"
+          ? cr.y
+          : typeof cr.yFrac === "number"
+            ? cr.yFrac * worldH
+            : null;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const r = Number.isFinite(cr.r) ? cr.r : clamp(ballR * 0.78, ballR * 0.55, ballR * 0.95);
+      rotors.push({
+        x: clamp(x, padX + r + 2, worldW - padX - r - 2),
+        y: clamp(y, 30 + r, worldH - slotH - 30 - r),
+        r,
+        omega: Number.isFinite(cr.omega) ? cr.omega : 11.0,
+        maxSurf: Number.isFinite(cr.maxSurf) ? cr.maxSurf : 620,
+        bounce: Number.isFinite(cr.bounce) ? cr.bounce : 0.28,
+        kick: Number.isFinite(cr.kick) ? cr.kick : 190,
+        dampT: Number.isFinite(cr.dampT) ? cr.dampT : 0.02,
+        down: Number.isFinite(cr.down) ? cr.down : 16,
+        maxUp: Number.isFinite(cr.maxUp) ? cr.maxUp : 20
+      });
+    }
+  }
 
   return {
     entities,
     propellers,
+    rotors,
     topY,
     spawnY,
     spawnBoundsAtY: (y) => {
@@ -1419,11 +1321,15 @@ function resolveCircleSegment(m, s, restitution) {
     m.vx -= (1 + restitution) * vn * nx;
     m.vy -= (1 + restitution) * vn * ny;
     // Tangential damping for less "ice-skating" along walls.
+    // Important: don't overdamp *downward* wall-sliding (especially in zigzag corridors),
+    // otherwise marbles feel like they "stick" to the wall and drain painfully slowly.
     const tx = -ny;
     const ty = nx;
     const vt = m.vx * tx + m.vy * ty;
-    m.vx -= vt * tx * 0.08;
-    m.vy -= vt * ty * 0.08;
+    const downAlongWall = vt * ty > 0; // +y is down in our coords
+    const k = downAlongWall ? 0.012 : 0.055;
+    m.vx -= vt * tx * k;
+    m.vy -= vt * ty * k;
   }
 }
 
@@ -1496,68 +1402,68 @@ function resolvePropeller(state, m, p, restitution) {
   state.stats.propellerContacts++;
 }
 
-function findSafePointForCircle(state, x, y, r, margin) {
-  const b = state.board;
-  const candidates = [
-    { x, y },
-    { x: x - r * 3.2, y },
-    { x: x + r * 3.2, y },
-    { x: x - r * 6.0, y },
-    { x: x + r * 6.0, y }
-  ];
+function resolveRotor(state, m, r, restitution) {
+  const dx = m.x - r.x;
+  const dy = m.y - r.y;
+  const sumR = m.r + r.r;
+  const d2 = dx * dx + dy * dy;
+  if (d2 >= sumR * sumR || d2 === 0) return;
+  const d = Math.sqrt(d2);
+  const nx = dx / d;
+  const ny = dy / d;
 
-  for (const c of candidates) {
-    const p = clampPointToBounds(b, c.x, c.y, r + margin * 0.25);
-    if (!isCircleTooCloseToWalls(b, p.x, p.y, r, margin)) return p;
-  }
-  return null;
-}
+  // Push out.
+  const push = (sumR - d) + 0.02;
+  m.x += nx * push;
+  m.y += ny * push;
 
-function clampPointToBounds(b, x, y, pad) {
-  if (b.layout === "roulette" && b.roulette?.spawnBoundsAtY) {
-    const bb = b.roulette.spawnBoundsAtY(y);
-    const left = Number(bb.left);
-    const right = Number(bb.right);
-    if (Number.isFinite(left) && Number.isFinite(right)) return { x: clamp(x, left + pad, right - pad), y };
+  // Rotor surface velocity at contact point (omega cross rVec).
+  const omega = r.omega || 0;
+  const rx = (r.r + 0.5) * nx;
+  const ry = (r.r + 0.5) * ny;
+  let vSurfX = -omega * ry;
+  let vSurfY = omega * rx;
+  const maxSurf = Number.isFinite(r.maxSurf) ? r.maxSurf : Infinity;
+  if (Number.isFinite(maxSurf) && maxSurf > 0) {
+    const vmag = Math.hypot(vSurfX, vSurfY);
+    if (vmag > maxSurf) {
+      const k = maxSurf / vmag;
+      vSurfX *= k;
+      vSurfY *= k;
+    }
   }
-  if (b.corridor) {
-    const { left, right } = corridorAt(b.corridor, y);
-    return { x: clamp(x, left + pad, right - pad), y };
-  }
-  return { x: clamp(x, pad, b.worldW - pad), y };
-}
 
-function isCircleTooCloseToWalls(b, x, y, r, margin) {
-  const segs = b.wallSegments || [];
-  if (!segs.length) return false;
-  const pad = r + margin;
-  const candidates = [];
-  if (b.wallBins?.bins?.length) {
-    const h = b.wallBins.binH;
-    const i0 = clampInt(Math.floor((y - pad) / h), 0, b.wallBins.bins.length - 1);
-    const i1 = clampInt(Math.floor((y + pad) / h), 0, b.wallBins.bins.length - 1);
-    for (let i = i0; i <= i1; i++) for (const idx of b.wallBins.bins[i]) candidates.push(idx);
-  } else {
-    for (let i = 0; i < segs.length; i++) candidates.push(i);
+  // Reflect relative velocity against rotor surface.
+  const rvx = m.vx - vSurfX;
+  const rvy = m.vy - vSurfY;
+  const vn = rvx * nx + rvy * ny;
+  if (vn < 0) {
+    const bounce = Number.isFinite(r.bounce) ? r.bounce : restitution;
+    m.vx = rvx - (1 + bounce) * vn * nx + vSurfX;
+    m.vy = rvy - (1 + bounce) * vn * ny + vSurfY;
   }
-  const uniq = candidates.length > 64 ? new Set(candidates) : null;
-  const it = uniq ? uniq.values() : candidates;
-  for (const idx of it) {
-    const s = segs[idx];
-    if (y + pad < s.yMin || y - pad > s.yMax) continue;
-    const d2 = distPointToSeg2(x, y, s);
-    if (d2 < pad * pad) return true;
-  }
-  return false;
-}
 
-function distPointToSeg2(px, py, s) {
-  const t = clamp(((px - s.x0) * s.dx + (py - s.y0) * s.dy) / s.len2, 0, 1);
-  const cx = s.x0 + s.dx * t;
-  const cy = s.y0 + s.dy * t;
-  const dx = px - cx;
-  const dy = py - cy;
-  return dx * dx + dy * dy;
+  // Extra "bumper" kick so rotors feel like pinball bumpers (stronger separation, more drama).
+  // Applied along the collision normal after reflection.
+  const kick = Number.isFinite(r.kick) ? r.kick : 0;
+  if (kick) {
+    m.vx += nx * kick;
+    m.vy += ny * kick;
+  }
+
+  // Mild tangential damping to avoid endless orbiting.
+  const tx = -ny;
+  const ty = nx;
+  const vt = (m.vx - vSurfX) * tx + (m.vy - vSurfY) * ty;
+  const dampT = Number.isFinite(r.dampT) ? r.dampT : 0.02;
+  m.vx -= vt * tx * dampT;
+  m.vy -= vt * ty * dampT;
+
+  // Help the board keep draining.
+  const down = Number.isFinite(r.down) ? r.down : 0;
+  if (down) m.vy += down;
+  const maxUp = Number.isFinite(r.maxUp) ? r.maxUp : Infinity;
+  if (Number.isFinite(maxUp) && maxUp >= 0) m.vy = Math.max(m.vy, -maxUp);
 }
 
 function hash01(str) {
