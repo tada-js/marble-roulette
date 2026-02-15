@@ -491,7 +491,9 @@ function layoutPending(state) {
   const n = state.pending.length;
   if (!n) return;
   const gap = ballR * 2.2;
-  const baseY = 70;
+  const baseY = (state.board.layout === "roulette" && state.board.roulette?.spawnY)
+    ? state.board.roulette.spawnY
+    : 70;
   const spawnBounds = (y) => {
     if (state.board.layout === "roulette" && state.board.roulette?.spawnBoundsAtY) {
       const b = state.board.roulette.spawnBoundsAtY(y);
@@ -508,8 +510,8 @@ function layoutPending(state) {
     const row = Math.floor(i / perRow);
     const col = i % perRow;
     const colsInThisRow = Math.min(perRow, n - row * perRow);
-    // Stack upward so a large count doesn't start inside the maze.
-    state.pending[i].y = baseY - row * (ballR * 1.9);
+    // Stack downward to avoid escaping above the top cap.
+    state.pending[i].y = baseY + row * (ballR * 1.9);
     const b = spawnBounds(state.pending[i].y);
     const center = clamp(state.dropX, b.left + ballR + 2, b.right - ballR - 2);
     const x0 = center - ((colsInThisRow - 1) * gap) / 2;
@@ -534,6 +536,11 @@ function settleMarbles(state, iterations) {
       if (m.done) continue;
       if (wallSegments && wallSegments.length) {
         resolveWallSegments(state.board, m, restitution, wallSegments, wallBins);
+        // Also clamp against top cap line even if segments miss due to numerical issues.
+        if (state.board.roulette?.topY != null) {
+          const top = state.board.roulette.topY + m.r + 2;
+          if (m.y < top) m.y = top;
+        }
       } else if (corridor) {
         const { left, right } = corridorAt(corridor, m.y);
         m.x = clamp(m.x, left + m.r, right - m.r);
@@ -913,6 +920,20 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
 
   const outerLeft = polylines.find((p) => p.id === "outer-left")?.points || [];
   const outerRight = polylines.find((p) => p.id === "outer-right")?.points || [];
+  const topY = Math.min(...outerLeft.map((p) => p[1]).concat(outerRight.map((p) => p[1])));
+  const spawnY = topY + 48;
+
+  // Close the top so marbles can't escape upward when crowded.
+  const capLeft = interpolateXAtY(outerLeft, topY);
+  const capRight = interpolateXAtY(outerRight, topY);
+  polylines.push({
+    id: "top-cap",
+    type: "polyline",
+    points: [
+      [capLeft, topY],
+      [capRight, topY]
+    ]
+  });
 
   const boxes = stageBoxes.map((b) => ({
     id: `box_${b.x}_${b.y}_${b.rot}`,
@@ -931,7 +952,9 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
       const left = interpolateXAtY(outerLeft, y);
       const right = interpolateXAtY(outerRight, y);
       return { left: Math.min(left, right), right: Math.max(left, right) };
-    }
+    },
+    spawnY,
+    topY
   };
 }
 
