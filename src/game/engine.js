@@ -1047,20 +1047,40 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18 }) {
   // Leave some side clearance so marbles can bypass the blades.
   const propLen = Math.max(240, hw * 1.55);
   // Early propeller near the start (inside the wide corridor) to reshuffle early,
-  // but tuned to never "trap" marbles: shorter blade, gentler rotation, no tangential shove.
+  // but tuned to never "trap" marbles: multiple smaller blades across the corridor, gentler rotation,
+  // and no tangential shove.
   const earlyY = ky(0.135);
   const early = profileAt(earlyY);
-  // Length: extend nearly to walls so most/all marbles must interact at least once.
-  // Keep a small clearance so the blade does not collide with walls numerically and marbles can still drain.
   const earlyClear = Math.max(ballR * 1.7 + 14, 40);
-  const earlyLen = clamp(early.hw * 2 - earlyClear * 2, 220, early.hw * 1.95);
+  const earlyLeft = early.cx - early.hw + earlyClear;
+  const earlyRight = early.cx + early.hw - earlyClear;
+  const earlyW = Math.max(0, earlyRight - earlyLeft);
+  // Choose a fixed count based on available width, capped for stability/perf.
+  const earlyCount = clampInt(Math.floor(earlyW / Math.max(160, ballR * 7.2)), 3, 6);
+  const cellW = earlyW / earlyCount;
+  const earlyLen = clamp(cellW * 0.92, 120, cellW * 1.05);
 
-  const propellers = [
-    // Early propeller acts like a gentle "mixing gate": forces interaction but avoids throwing marbles upward.
-    { x: early.cx, y: earlyY, len: earlyLen, omega: 0.85, phase: Math.PI / 4, mix: 0, down: 78, maxUp: 0, bounce: 0.03, maxSurf: 240 },
-    // Single rotating bar: mixes but still lets marbles drain without getting trapped behind a "cross".
-    { x: cx, y: mixY, len: propLen, omega: 1.1, phase: 0, mix: 8, down: 18, maxUp: 110, maxSurf: 520 }
-  ];
+  const propellers = [];
+  for (let i = 0; i < earlyCount; i++) {
+    const x = earlyLeft + cellW * (i + 0.5);
+    // Alternate rotation direction so the gate doesn't bias all marbles the same way.
+    const dir = i % 2 ? -1 : 1;
+    propellers.push({
+      x,
+      y: earlyY,
+      len: earlyLen,
+      omega: dir * 0.85,
+      phase: (Math.PI / 8) * i,
+      mix: 0,
+      down: 78,
+      maxUp: 0,
+      bounce: 0.03,
+      maxSurf: 240
+    });
+  }
+
+  // Single rotating bar: mixes but still lets marbles drain without getting trapped behind a "cross".
+  propellers.push({ x: cx, y: mixY, len: propLen, omega: 1.1, phase: 0, mix: 8, down: 18, maxUp: 110, maxSurf: 520 });
 
   return {
     entities,
