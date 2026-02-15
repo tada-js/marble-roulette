@@ -231,7 +231,6 @@ export function dropAll(state) {
 
 export function step(state, dt) {
   if (state.mode !== "playing") return;
-  state.t += dt;
 
   // Heavier feel: lower gravity, lower bounciness, and more damping.
   const g = 1050; // px/s^2 in world units
@@ -239,142 +238,179 @@ export function step(state, dt) {
   const air = 0.988;
   const maxV = 1700;
 
-  const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY, corridor, wallSegments, wallBins } = state.board;
+  const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY, corridor, wallSegments, wallBins } =
+    state.board;
   const finishY = worldH - slotH;
 
+  // Prevent tunneling through thin walls when many marbles pile up by sub-stepping.
+  // Keep this capped to avoid exploding CPU cost for large counts.
+  let maxSpeed = 0;
+  let minR = Infinity;
   for (const m of state.marbles) {
     if (m.done) continue;
+    const sp = Math.hypot(m.vx, m.vy);
+    if (sp > maxSpeed) maxSpeed = sp;
+    if (m.r < minR) minR = m.r;
+  }
+  const maxDisp = maxSpeed * dt + 0.5 * g * dt * dt;
+  const targetDisp = Math.max(4, (Number.isFinite(minR) ? minR : 18) * 0.45);
+  const subSteps = clampInt(Math.ceil(maxDisp / targetDisp), 1, 6);
+  const dtSub = dt / subSteps;
 
-    // Chaos: wind zones (adds horizontal acceleration).
-    if (state.chaos.enabled && state.chaos.windZones.length) {
-      for (const z of state.chaos.windZones) {
-        if (m.x < z.x0 || m.x > z.x1 || m.y < z.y0 || m.y > z.y1) continue;
-        const phase = z.phase + state.t * z.freq;
-        m.vx += Math.sin(phase) * z.ax * dt;
+  for (let s = 0; s < subSteps; s++) {
+    state.t += dtSub;
+
+    // Integrate.
+    for (const m of state.marbles) {
+      if (m.done) continue;
+
+      // Chaos: wind zones (adds horizontal acceleration).
+      if (state.chaos.enabled && state.chaos.windZones.length) {
+        for (const z of state.chaos.windZones) {
+          if (m.x < z.x0 || m.x > z.x1 || m.y < z.y0 || m.y > z.y1) continue;
+          const phase = z.phase + state.t * z.freq;
+          m.vx += Math.sin(phase) * z.ax * dtSub;
+        }
+      }
+
+      m.vy += g * dtSub;
+      m.vx *= air;
+      m.vy *= air;
+
+      // Cap speed so chaos objects can't make marbles look weightless.
+      const sp2 = m.vx * m.vx + m.vy * m.vy;
+      if (sp2 > maxV * maxV) {
+        const k = maxV / Math.sqrt(sp2);
+        m.vx *= k;
+        m.vy *= k;
+      }
+
+      m.x += m.vx * dtSub;
+      m.y += m.vy * dtSub;
+
+      // Finish line -> slot result.
+      if (m.y + m.r >= finishY) {
+        const idx = clampInt(Math.floor(m.x / slotW), 0, slots.length - 1);
+        m.done = true;
+        m.result = { slot: idx, label: slots[idx].label };
+        state.lastResult = { marbleId: m.id, ballId: m.ballId, ...m.result };
+        state.finished.push({ marbleId: m.id, ballId: m.ballId, t: state.t, ...m.result });
+        m.y = finishY - m.r;
+        m.vx = 0;
+        m.vy = 0;
       }
     }
 
-    m.vy += g * dt;
-    m.vx *= air;
-    m.vy *= air;
-    // Cap speed so chaos objects can't make marbles look weightless.
-    const sp2 = m.vx * m.vx + m.vy * m.vy;
-    if (sp2 > maxV * maxV) {
-      const s = maxV / Math.sqrt(sp2);
-      m.vx *= s;
-      m.vy *= s;
-    }
-    m.x += m.vx * dt;
-    m.y += m.vy * dt;
+    // Resolve collisions. Iterate a couple times to handle dense stacks.
+    for (let iter = 0; iter < 2; iter++) {
+      for (const m of state.marbles) {
+        if (m.done) continue;
 
-    // Walls (roulette map segments OR variable-width corridor OR plain bounds).
-    if (wallSegments && wallSegments.length) {
-      resolveWallSegments(state.board, m, restitution, wallSegments, wallBins);
-    } else if (corridor) {
-      const { left, right } = corridorAt(corridor, m.y);
-      if (m.x - m.r < left) {
-        m.x = left + m.r;
-        m.vx = Math.abs(m.vx) * restitution;
-      } else if (m.x + m.r > right) {
-        m.x = right - m.r;
-        m.vx = -Math.abs(m.vx) * restitution;
-      }
-    } else {
-      if (m.x - m.r < 0) {
-        m.x = m.r;
-        m.vx = Math.abs(m.vx) * restitution;
-      } else if (m.x + m.r > worldW) {
-        m.x = worldW - m.r;
-        m.vx = -Math.abs(m.vx) * restitution;
-      }
-    }
+        // Walls (roulette map segments OR variable-width corridor OR plain bounds).
+        if (wallSegments && wallSegments.length) {
+          resolveWallSegments(state.board, m, restitution, wallSegments, wallBins);
+        } else if (corridor) {
+          const { left, right } = corridorAt(corridor, m.y);
+          if (m.x - m.r < left) {
+            m.x = left + m.r;
+            m.vx = Math.abs(m.vx) * restitution;
+          } else if (m.x + m.r > right) {
+            m.x = right - m.r;
+            m.vx = -Math.abs(m.vx) * restitution;
+          }
+        } else {
+          if (m.x - m.r < 0) {
+            m.x = m.r;
+            m.vx = Math.abs(m.vx) * restitution;
+          } else if (m.x + m.r > worldW) {
+            m.x = worldW - m.r;
+            m.vx = -Math.abs(m.vx) * restitution;
+          }
+        }
 
-    // Peg collisions (fixed pegs). Only check nearby rows for perf on tall boards.
-    if (pegRows && pegRows.length) {
-      const rCenter = clampInt(Math.round((m.y - topPad) / pegGapY), 0, pegRows.length - 1);
-      for (let rr = Math.max(0, rCenter - 2); rr <= Math.min(pegRows.length - 1, rCenter + 2); rr++) {
-        const row = pegRows[rr];
-        for (const p of row) {
-          const dx = m.x - p.x;
-          const dy = m.y - p.y;
-          const sumR = m.r + p.r;
+        // Peg collisions (fixed pegs). Only check nearby rows for perf on tall boards.
+        if (pegRows && pegRows.length) {
+          const rCenter = clampInt(Math.round((m.y - topPad) / pegGapY), 0, pegRows.length - 1);
+          for (let rr = Math.max(0, rCenter - 2); rr <= Math.min(pegRows.length - 1, rCenter + 2); rr++) {
+            const row = pegRows[rr];
+            for (const p of row) {
+              const dx = m.x - p.x;
+              const dy = m.y - p.y;
+              const sumR = m.r + p.r;
+              const d2 = dx * dx + dy * dy;
+              if (d2 >= sumR * sumR) continue;
+              const d = Math.max(0.0001, Math.sqrt(d2));
+              const nx = dx / d;
+              const ny = dy / d;
+
+              // Push out.
+              const push = sumR - d;
+              m.x += nx * push;
+              m.y += ny * push;
+
+              // Reflect along normal if moving into peg.
+              const vn = m.vx * nx + m.vy * ny;
+              if (vn < 0) {
+                m.vx -= (1 + restitution) * vn * nx;
+                m.vy -= (1 + restitution) * vn * ny;
+
+                // Mild tangential damping to avoid endless jitter.
+                const vtX = m.vx - (m.vx * nx + m.vy * ny) * nx;
+                const vtY = m.vy - (m.vx * nx + m.vy * ny) * ny;
+                m.vx -= vtX * 0.04;
+                m.vy -= vtY * 0.04;
+              }
+            }
+          }
+        }
+
+        // Chaos: bumpers/spinners/portals (check near Y only).
+        if (state.chaos.enabled) {
+          applyChaosCollisions(state, m, restitution);
+        }
+      }
+
+      // Marble-marble collisions (simple impulse).
+      // This keeps the "all drop together" case from looking like ghosts.
+      for (let i = 0; i < state.marbles.length; i++) {
+        const a = state.marbles[i];
+        if (a.done) continue;
+        for (let j = i + 1; j < state.marbles.length; j++) {
+          const b = state.marbles[j];
+          if (b.done) continue;
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const rr = a.r + b.r;
           const d2 = dx * dx + dy * dy;
-          if (d2 >= sumR * sumR) continue;
-          const d = Math.max(0.0001, Math.sqrt(d2));
+          if (d2 >= rr * rr || d2 === 0) continue;
+          const d = Math.sqrt(d2);
           const nx = dx / d;
           const ny = dy / d;
+          const push = (rr - d) * 0.5;
+          a.x += nx * push;
+          a.y += ny * push;
+          b.x -= nx * push;
+          b.y -= ny * push;
 
-          // Push out.
-          const push = sumR - d;
-          m.x += nx * push;
-          m.y += ny * push;
-
-          // Reflect along normal if moving into peg.
-          const vn = m.vx * nx + m.vy * ny;
+          const rvx = a.vx - b.vx;
+          const rvy = a.vy - b.vy;
+          const vn = rvx * nx + rvy * ny;
           if (vn < 0) {
-            m.vx -= (1 + restitution) * vn * nx;
-            m.vy -= (1 + restitution) * vn * ny;
-
-            // Mild tangential damping to avoid endless jitter.
-            const vtX = m.vx - (m.vx * nx + m.vy * ny) * nx;
-            const vtY = m.vy - (m.vx * nx + m.vy * ny) * ny;
-            m.vx -= vtX * 0.04;
-            m.vy -= vtY * 0.04;
+            const imp = -(1 + restitution) * vn * 0.5; // equal mass
+            a.vx += imp * nx;
+            a.vy += imp * ny;
+            b.vx -= imp * nx;
+            b.vy -= imp * ny;
           }
         }
       }
     }
 
-    // Chaos: bumpers/spinners/portals (check near Y only).
-    if (state.chaos.enabled) {
-      applyChaosCollisions(state, m, restitution);
-    }
-
-    // Marble-marble collisions (simple impulse).
-    // This keeps the "all drop together" case from looking like ghosts.
-    for (const o of state.marbles) {
-      if (o === m || o.done) continue;
-      const dx = m.x - o.x;
-      const dy = m.y - o.y;
-      const rr = m.r + o.r;
-      const d2 = dx * dx + dy * dy;
-      if (d2 >= rr * rr || d2 === 0) continue;
-      const d = Math.sqrt(d2);
-      const nx = dx / d;
-      const ny = dy / d;
-      const push = (rr - d) * 0.5;
-      m.x += nx * push;
-      m.y += ny * push;
-      o.x -= nx * push;
-      o.y -= ny * push;
-
-      const rvx = m.vx - o.vx;
-      const rvy = m.vy - o.vy;
-      const vn = rvx * nx + rvy * ny;
-      if (vn < 0) {
-        const j = -(1 + restitution) * vn * 0.5; // equal mass
-        m.vx += j * nx;
-        m.vy += j * ny;
-        o.vx -= j * nx;
-        o.vy -= j * ny;
-      }
-    }
-
-    // Finish line -> slot result.
-    if (m.y + m.r >= finishY) {
-      const idx = clampInt(Math.floor(m.x / slotW), 0, slots.length - 1);
-      m.done = true;
-      m.result = { slot: idx, label: slots[idx].label };
-      state.lastResult = { marbleId: m.id, ballId: m.ballId, ...m.result };
-      state.finished.push({ marbleId: m.id, ballId: m.ballId, t: state.t, ...m.result });
-      if (state.released && state.totalToDrop > 0 && state.finished.length === state.totalToDrop) {
-        // Winner: the one who arrives last (max finish time). With simultaneous drop, this is also the last finish event.
-        const last = state.finished.reduce((a, b) => (a.t >= b.t ? a : b));
-        state.winner = last;
-      }
-      m.y = finishY - m.r;
-      m.vx = 0;
-      m.vy = 0;
+    if (state.released && state.totalToDrop > 0 && state.finished.length === state.totalToDrop) {
+      // Winner: the one who arrives last (max finish time). With simultaneous drop, this is also the last finish event.
+      const last = state.finished.reduce((a, b) => (a.t >= b.t ? a : b));
+      state.winner = last;
+      break;
     }
   }
 }
@@ -948,7 +984,11 @@ function resolveWallSegments(board, m, restitution, segments, bins) {
     for (let i = 0; i < segments.length; i++) candidates.push(i);
   }
 
-  for (const idx of candidates) {
+  // Avoid doing the same segment twice when bins overlap.
+  const uniq = candidates.length > 64 ? new Set(candidates) : null;
+  const it = uniq ? uniq.values() : candidates;
+
+  for (const idx of it) {
     const s = segments[idx];
     if (m.y + m.r < s.yMin - 2 || m.y - m.r > s.yMax + 2) continue;
     resolveCircleSegment(m, s, restitution);
