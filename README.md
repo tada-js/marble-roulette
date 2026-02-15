@@ -13,7 +13,8 @@
 ## Local Dev
 
 ```bash
-cd /Users/kimseonghun/Desktop/project/marble-roulette
+# repo root에서 실행
+cd marble-roulette
 npm ci
 npm run dev
 ```

@@ -3,7 +3,8 @@ import { saveBallsCatalog, restoreDefaultBalls } from "./storage.js";
 export function mountSettingsDialog(dialogEl, listEl, restoreBtn, getBalls, setBalls) {
   function render() {
     const balls = getBalls();
-    listEl.innerHTML = "";
+    // Avoid innerHTML to reduce the chance of accidental XSS patterns.
+    listEl.replaceChildren();
     for (const b of balls) {
       const row = document.createElement("div");
       row.className = "settings-row";
