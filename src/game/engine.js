@@ -25,7 +25,7 @@ export function makeBoard({
   heightMultiplier = 1,
   elementScale = 1,
   corridorEnabled = true,
-  layout = "classic" // classic | roulette
+  layout = "classic" // classic | roulette | zigzag
 } = {}) {
   const baseH = worldH;
   const baseRows = rows;
@@ -44,9 +44,11 @@ export function makeBoard({
   let pegs = [];
   let pegRows = [];
 
-  // Roulette-style map: fixed polylines + boxes (no procedural pegs).
+  // Fixed map layouts: polylines + boxes + optional propellers (no procedural pegs).
   const roulette = layout === "roulette" ? makeRouletteLayout({ worldW, worldH, slotH }) : null;
-  const wallSegments = roulette ? buildWallSegments(roulette.entities) : [];
+  const zigzag = layout === "zigzag" ? makeZigzagLayout({ worldW, worldH, slotH }) : null;
+  const fixed = roulette || zigzag;
+  const wallSegments = fixed ? buildWallSegments(fixed.entities) : [];
   const wallBins = wallSegments.length ? buildSegmentBins(wallSegments, 260) : null;
 
   if (layout === "classic") {
@@ -102,6 +104,7 @@ export function makeBoard({
     pegGapY,
     corridor,
     roulette,
+    zigzag,
     wallSegments,
     wallBins,
     slots
@@ -174,8 +177,14 @@ export function prepareDropQueue(state, { shuffle = true } = {}) {
 
 export function setDropX(state, x) {
   const pad = state.board.ballR + 2;
-  if (state.board.layout === "roulette" && state.board.roulette?.spawnBoundsAtY) {
-    const { left, right } = state.board.roulette.spawnBoundsAtY(80);
+  const spawnBoundsAtY =
+    state.board.layout === "roulette"
+      ? state.board.roulette?.spawnBoundsAtY
+      : state.board.layout === "zigzag"
+        ? state.board.zigzag?.spawnBoundsAtY
+        : null;
+  if (spawnBoundsAtY) {
+    const { left, right } = spawnBoundsAtY(80);
     state.dropX = clamp(x, left + pad, right - pad);
   } else if (state.board.corridor) {
     const { left, right } = corridorAt(state.board.corridor, 80);
@@ -242,9 +251,10 @@ export function step(state, dt) {
   const air = 0.988;
   const maxV = 1700;
 
-  const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY, corridor, wallSegments, wallBins } =
+  const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY, corridor, wallSegments, wallBins, zigzag } =
     state.board;
   const finishY = worldH - slotH;
+  const propellers = zigzag?.propellers || null;
 
   // Prevent tunneling through thin walls when many marbles pile up by sub-stepping.
   // Keep this capped to avoid exploding CPU cost for large counts.
@@ -365,6 +375,13 @@ export function step(state, dt) {
                 m.vy -= vtY * 0.04;
               }
             }
+          }
+        }
+
+        // Zigzag layout: rotating propellers in mixing chamber.
+        if (propellers && propellers.length) {
+          for (const p of propellers) {
+            resolvePropeller(state, m, p, restitution);
           }
         }
 
@@ -506,12 +523,22 @@ function layoutPending(state) {
   const n = state.pending.length;
   if (!n) return;
   const gap = ballR * 2.2;
-  const baseY = (state.board.layout === "roulette" && state.board.roulette?.spawnY)
-    ? state.board.roulette.spawnY
-    : 70;
+  const spawnY =
+    state.board.layout === "roulette"
+      ? state.board.roulette?.spawnY
+      : state.board.layout === "zigzag"
+        ? state.board.zigzag?.spawnY
+        : null;
+  const baseY = typeof spawnY === "number" ? spawnY : 70;
   const spawnBounds = (y) => {
-    if (state.board.layout === "roulette" && state.board.roulette?.spawnBoundsAtY) {
-      const b = state.board.roulette.spawnBoundsAtY(y);
+    const spawnBoundsAtY =
+      state.board.layout === "roulette"
+        ? state.board.roulette?.spawnBoundsAtY
+        : state.board.layout === "zigzag"
+          ? state.board.zigzag?.spawnBoundsAtY
+          : null;
+    if (spawnBoundsAtY) {
+      const b = spawnBoundsAtY(y);
       const left = Number(b?.left);
       const right = Number(b?.right);
       if (Number.isFinite(left) && Number.isFinite(right) && right - left > ballR * 4) return { left, right };
@@ -531,7 +558,10 @@ function layoutPending(state) {
     const center = clamp(state.dropX, b.left + ballR + 2, b.right - ballR - 2);
     const x0 = center - ((colsInThisRow - 1) * gap) / 2;
     const desiredX = x0 + col * gap;
-    if (state.board.layout === "roulette" && state.board.roulette?.spawnBoundsAtY) {
+    if (
+      (state.board.layout === "roulette" && state.board.roulette?.spawnBoundsAtY) ||
+      (state.board.layout === "zigzag" && state.board.zigzag?.spawnBoundsAtY)
+    ) {
       state.pending[i].x = clamp(desiredX, b.left + ballR + 2, b.right - ballR - 2);
     } else if (state.board.corridor) {
       const { left, right } = corridorAt(state.board.corridor, state.pending[i].y);
@@ -545,6 +575,12 @@ function layoutPending(state) {
 function settleMarbles(state, iterations) {
   const { worldW, wallSegments, wallBins, corridor } = state.board;
   const restitution = 0.25;
+  const topY =
+    state.board.layout === "roulette"
+      ? state.board.roulette?.topY
+      : state.board.layout === "zigzag"
+        ? state.board.zigzag?.topY
+        : null;
   for (let it = 0; it < iterations; it++) {
     // Walls first.
     for (const m of state.marbles) {
@@ -552,8 +588,8 @@ function settleMarbles(state, iterations) {
       if (wallSegments && wallSegments.length) {
         resolveWallSegments(state.board, m, restitution, wallSegments, wallBins);
         // Also clamp against top cap line even if segments miss due to numerical issues.
-        if (state.board.roulette?.topY != null) {
-          const top = state.board.roulette.topY + m.r + 2;
+        if (topY != null) {
+          const top = topY + m.r + 2;
           if (m.y < top) m.y = top;
         }
       } else if (corridor) {
@@ -818,8 +854,14 @@ function applyChaosCollisions(state, m, restitution) {
     const ang = state.chaos.fixed ? (hash01(m.id) * Math.PI * 2) : rnd() * Math.PI * 2;
     const desiredX = to.x + Math.cos(ang) * (m.r + 4);
     m.y = clamp(to.y + Math.sin(ang) * (m.r + 4), m.r + 2, b.worldH - b.slotH - m.r - 2);
-    if (b.layout === "roulette" && b.roulette?.spawnBoundsAtY) {
-      const bb = b.roulette.spawnBoundsAtY(m.y);
+    const spawnBoundsAtY =
+      b.layout === "roulette"
+        ? b.roulette?.spawnBoundsAtY
+        : b.layout === "zigzag"
+          ? b.zigzag?.spawnBoundsAtY
+          : null;
+    if (spawnBoundsAtY) {
+      const bb = spawnBoundsAtY(m.y);
       const left = Number(bb.left);
       const right = Number(bb.right);
       m.x = clamp(desiredX, left + m.r + 2, right - m.r - 2);
@@ -894,6 +936,85 @@ function corridorAt(corridor, y) {
 function smoothstep(x) {
   const t = clamp(x, 0, 1);
   return t * t * (3 - 2 * t);
+}
+
+function makeZigzagLayout({ worldW, worldH, slotH }) {
+  const padX = 32;
+  const topY = 40;
+  const spawnY = topY + 70;
+
+  const yEnd = worldH - slotH - 40;
+
+  const narrowHalf = Math.max(120, worldW * 0.20);
+  const wideHalf = Math.max(narrowHalf * 1.8, worldW * 0.40);
+
+  // Zigzag by shifting the corridor center in a piecewise-linear way.
+  const keys = [
+    { y: topY, cx: worldW * 0.50, hw: narrowHalf },
+    { y: yEnd * 0.18, cx: worldW * 0.35, hw: narrowHalf },
+    { y: yEnd * 0.34, cx: worldW * 0.65, hw: narrowHalf },
+    { y: yEnd * 0.48, cx: worldW * 0.40, hw: narrowHalf },
+
+    // Mixing chamber (wide).
+    { y: yEnd * 0.60, cx: worldW * 0.52, hw: wideHalf },
+    { y: yEnd * 0.72, cx: worldW * 0.52, hw: wideHalf },
+
+    // Back to narrow zigzag.
+    { y: yEnd * 0.82, cx: worldW * 0.62, hw: narrowHalf },
+    { y: yEnd * 0.92, cx: worldW * 0.38, hw: narrowHalf },
+    { y: yEnd, cx: worldW * 0.50, hw: narrowHalf }
+  ];
+
+  function profileAt(y) {
+    if (y <= keys[0].y) return keys[0];
+    for (let i = 0; i < keys.length - 1; i++) {
+      const a = keys[i];
+      const b = keys[i + 1];
+      if (y >= a.y && y <= b.y) {
+        const t = (y - a.y) / Math.max(1e-6, b.y - a.y);
+        return { y, cx: lerp(a.cx, b.cx, t), hw: lerp(a.hw, b.hw, t) };
+      }
+    }
+    return keys[keys.length - 1];
+  }
+
+  const sampleN = 200;
+  const left = [];
+  const right = [];
+  for (let i = 0; i < sampleN; i++) {
+    const y = topY + (i / (sampleN - 1)) * (yEnd - topY);
+    const { cx, hw } = profileAt(y);
+    left.push([clamp(cx - hw, padX, worldW - padX), y]);
+    right.push([clamp(cx + hw, padX, worldW - padX), y]);
+  }
+
+  const entities = [
+    { id: "outer-left", type: "polyline", points: left },
+    { id: "outer-right", type: "polyline", points: right },
+    { id: "top-cap", type: "polyline", points: [[left[0][0], topY], [right[0][0], topY]] }
+  ];
+
+  // Propeller in the mixing chamber.
+  const mixY0 = yEnd * 0.60;
+  const mixY1 = yEnd * 0.72;
+  const mixY = (mixY0 + mixY1) / 2;
+  const { cx, hw } = profileAt(mixY);
+  const propLen = hw * 1.55;
+  const propellers = [
+    { x: cx, y: mixY, len: propLen, omega: 1.55, phase: 0 },
+    { x: cx, y: mixY, len: propLen, omega: 1.55, phase: Math.PI / 2 }
+  ];
+
+  return {
+    entities,
+    propellers,
+    topY,
+    spawnY,
+    spawnBoundsAtY: (y) => {
+      const { cx, hw } = profileAt(y);
+      return { left: clamp(cx - hw, padX, worldW - padX), right: clamp(cx + hw, padX, worldW - padX) };
+    }
+  };
 }
 
 function makeRouletteLayout({ worldW, worldH, slotH }) {
@@ -1213,6 +1334,58 @@ function resolveCircleSegment(m, s, restitution) {
     m.vx -= vt * tx * 0.08;
     m.vy -= vt * ty * 0.08;
   }
+}
+
+function resolvePropeller(state, m, p, restitution) {
+  const t = state.t;
+  const ang = (p.phase || 0) + (p.omega || 0) * t;
+  const c = Math.cos(ang);
+  const s = Math.sin(ang);
+  const hx = (p.len / 2) * c;
+  const hy = (p.len / 2) * s;
+  const seg = makeSeg(p.x - hx, p.y - hy, p.x + hx, p.y + hy);
+
+  // Find closest point on segment.
+  const tt = clamp(((m.x - seg.x0) * seg.dx + (m.y - seg.y0) * seg.dy) / seg.len2, 0, 1);
+  const cx = seg.x0 + seg.dx * tt;
+  const cy = seg.y0 + seg.dy * tt;
+  const dx = m.x - cx;
+  const dy = m.y - cy;
+  const d2 = dx * dx + dy * dy;
+  if (d2 >= m.r * m.r || d2 === 0) return;
+  const d = Math.sqrt(d2);
+  const nx = dx / d;
+  const ny = dy / d;
+
+  // Push out.
+  const push = (m.r - d) + 0.02;
+  m.x += nx * push;
+  m.y += ny * push;
+
+  // Kinematic surface velocity at contact point (omega cross r).
+  const rx = cx - p.x;
+  const ry = cy - p.y;
+  const omega = p.omega || 0;
+  const vSurfX = -omega * ry;
+  const vSurfY = omega * rx;
+
+  // Reflect relative velocity against the propeller surface.
+  const rvx = m.vx - vSurfX;
+  const rvy = m.vy - vSurfY;
+  const vn = rvx * nx + rvy * ny;
+  if (vn < 0) {
+    const bounce = 0.22; // propeller is more "paddly" than bouncy
+    m.vx = rvx - (1 + bounce) * vn * nx + vSurfX;
+    m.vy = rvy - (1 + bounce) * vn * ny + vSurfY;
+  }
+
+  // Add a small tangential shove to "mix" marbles.
+  const tx = -ny;
+  const ty = nx;
+  const vt = (m.vx - vSurfX) * tx + (m.vy - vSurfY) * ty;
+  const mix = 18;
+  m.vx += tx * (mix * Math.sign(vt || 1));
+  m.vy += ty * (mix * Math.sign(vt || 1));
 }
 
 function findSafePointForCircle(state, x, y, r, margin) {
