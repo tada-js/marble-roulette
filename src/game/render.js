@@ -557,25 +557,6 @@ export function makeRenderer(canvas, { board }) {
       }
       ctx.restore();
 
-      // Arrival order badge for the single-slot mode.
-      if (board.slotCount === 1 && m.done && m.result?.label) {
-        const txt = String(m.result.label);
-        const fontSize = Math.max(11, Math.min(18, r * 0.95));
-        ctx.font = `800 ${fontSize}px ui-monospace, Menlo, monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        // Small plate for contrast over photos.
-        ctx.fillStyle = "rgba(0,0,0,0.45)";
-        ctx.beginPath();
-        ctx.arc(0, 0, Math.max(12, r * 0.62), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = "rgba(255,255,255,0.55)";
-        ctx.stroke();
-        ctx.fillStyle = "rgba(255,255,255,0.95)";
-        ctx.fillText(txt, 0, 0);
-      }
-
       // Glint.
       const gl = ctx.createRadialGradient(-r * 0.35, -r * 0.35, 1, -r * 0.35, -r * 0.35, r * 1.1);
       gl.addColorStop(0, "rgba(255,255,255,0.65)");

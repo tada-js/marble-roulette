@@ -7,16 +7,25 @@ function firstChar(s) {
   return Array.from(String(s || ""))[0] || "?";
 }
 
+function sanitizeHexColor(v, fallback) {
+  const s = String(v || "");
+  if (/^#[0-9a-fA-F]{3}$/.test(s)) return s;
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return s;
+  return fallback;
+}
+
 function makeLetterBall({ id, name, c0, c1, tint }) {
   const ch = escapeXml(firstChar(name));
+  const sc0 = sanitizeHexColor(c0, "#ffffff");
+  const sc1 = sanitizeHexColor(c1, sc0);
   const svg =
     "data:image/svg+xml;utf8," +
     encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
         <defs>
           <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="${c0}"/>
-            <stop offset="1" stop-color="${c1}"/>
+            <stop offset="0" stop-color="${sc0}"/>
+            <stop offset="1" stop-color="${sc1}"/>
           </linearGradient>
           <radialGradient id="v" cx="45%" cy="32%" r="78%">
             <stop offset="0" stop-color="rgba(255,255,255,0.18)"/>
@@ -25,10 +34,8 @@ function makeLetterBall({ id, name, c0, c1, tint }) {
         </defs>
         <rect width="128" height="128" rx="64" fill="url(#g)"/>
         <rect width="128" height="128" rx="64" fill="url(#v)"/>
-        <text x="64" y="64"
+        <text x="50%" y="50%" dy="0.35em"
           text-anchor="middle"
-          dominant-baseline="central"
-          alignment-baseline="central"
           font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
           font-size="72"
           font-weight="950"
@@ -37,7 +44,8 @@ function makeLetterBall({ id, name, c0, c1, tint }) {
         >${ch}</text>
       </svg>`
     );
-  return { id, name, imageDataUrl: svg, tint: tint || c0 || "#ffffff" };
+  const st = sanitizeHexColor(tint, sc0);
+  return { id, name, imageDataUrl: svg, tint: st };
 }
 
 export const DEFAULT_BALLS = [

@@ -89,10 +89,15 @@ function normalizeBallIcons(catalog) {
 
     const url = String(b?.imageDataUrl || "");
     const isSvg = url.startsWith("data:image/svg+xml");
-    const hasText = url.includes("%3Ctext") || url.includes("<text");
+    const isOurSvg =
+      url.startsWith("data:image/svg+xml") &&
+      (url.includes("radialGradient%20id%3D%22v%22") ||
+        url.includes('radialGradient id="v"') ||
+        url.includes("paint-order%3A%20stroke") ||
+        url.includes("paint-order: stroke"));
 
-    // Only migrate built-in SVG icons; keep user-provided PNG/JPEG/etc.
-    if (isSvg && !hasText) {
+    // Only migrate our built-in SVG icons; keep user-provided PNG/JPEG/etc (and custom SVG).
+    if (isSvg && isOurSvg && url !== lib.imageDataUrl) {
       changed = true;
       return { ...b, imageDataUrl: lib.imageDataUrl, tint: lib.tint };
     }
@@ -104,9 +109,11 @@ function normalizeBallIcons(catalog) {
 let ballsCatalog = loadBallsCatalog();
 {
   const { next, changed } = normalizeBallIcons(ballsCatalog);
-  if (changed) ballsCatalog = next;
+  if (changed) {
+    ballsCatalog = next;
+    saveBallsCatalog(ballsCatalog);
+  }
 }
-saveBallsCatalog(ballsCatalog);
 
 const state = makeGameState({ seed: 1337, board, ballsCatalog });
 state.counts = loadBallCounts(ballsCatalog);
@@ -193,6 +200,7 @@ function renderBallCards() {
     const name = document.createElement("div");
     name.className = "ball-name";
     name.textContent = b.name;
+    name.title = b.name;
     const id = document.createElement("div");
     id.className = "ball-id";
     id.textContent = b.id;
@@ -448,19 +456,49 @@ function bgmStart() {
   bgm.timer = setInterval(() => {
     if (!bgm.ctx) return;
     const now = bgm.ctx.currentTime;
+    // If we fell behind (e.g., tab was backgrounded), catch up.
+    if (bgm.nextT && bgm.nextT < now) bgm.nextT = now;
     schedule(now, 0.9);
   }, 320);
 }
 
 function setBgmOn(on) {
+  return setBgmOnWithOpts(on, { autoplay: true });
+}
+
+function setBgmOnWithOpts(on, { autoplay } = {}) {
   bgm.on = !!on;
   try { localStorage.setItem("bgmOn", bgm.on ? "1" : "0"); } catch {}
   if (bgmBtn) {
     bgmBtn.setAttribute("aria-pressed", bgm.on ? "true" : "false");
     bgmBtn.textContent = bgm.on ? "BGM 켬" : "BGM 끔";
   }
-  if (bgm.on) bgmStart();
+  if (bgm.on) {
+    if (autoplay) bgmStart();
+    else armBgmAutostart();
+  }
   else bgmStop();
+}
+
+function armBgmAutostart() {
+  if (bgm.ctx) return;
+  if (bgm._armed) return;
+  bgm._armed = true;
+
+  const tryResume = () => {
+    if (!bgm.on) return cleanup();
+    if (bgm.ctx) return cleanup();
+    bgmStart();
+    cleanup();
+  };
+  const cleanup = () => {
+    window.removeEventListener("pointerdown", tryResume);
+    window.removeEventListener("keydown", tryResume);
+    bgm._armed = false;
+  };
+
+  window.addEventListener("pointerdown", tryResume, { once: true, passive: true });
+  window.addEventListener("keydown", tryResume, { once: true });
 }
 
 function getWinnerPayloadFromState() {
@@ -533,7 +571,7 @@ settingsBtn.addEventListener("click", () => {
 
 bgmBtn?.addEventListener("click", async () => {
   // Ensure this runs under a user gesture so AudioContext can start.
-  setBgmOn(!bgm.on);
+  setBgmOnWithOpts(!bgm.on, { autoplay: true });
 });
 
 winnerBtn?.addEventListener("click", () => {
@@ -831,7 +869,8 @@ setInterval(drawMinimap, 100);
 // Init persisted BGM.
 try {
   const v = localStorage.getItem("bgmOn");
-  setBgmOn(v === "1");
+  // Restore UI state, but defer AudioContext start until a user gesture.
+  setBgmOnWithOpts(v === "1", { autoplay: false });
 } catch {
-  setBgmOn(false);
+  setBgmOnWithOpts(false, { autoplay: false });
 }

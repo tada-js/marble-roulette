@@ -103,7 +103,7 @@ html, body {
   mask-composite: exclude;
   pointer-events: none;
   filter: hue-rotate(0deg);
-  animation: rgbBorder 6.5s linear infinite;
+  animation: rgb-border 6.5s linear infinite;
   z-index: -1;
 }
 
@@ -121,7 +121,7 @@ html, body {
   background-clip: text;
   color: transparent;
   filter: hue-rotate(0deg);
-  animation: rgbBorder 8.5s linear infinite;
+  animation: rgb-border 8.5s linear infinite;
 }
 .brand__subtitle {
   margin-top: 2px;
@@ -207,6 +207,14 @@ canvas#game {
 .btn--ghost {
   background: rgba(255,255,255,0.03);
   box-shadow: none;
+}
+.btn--settings {
+  border-color: rgba(255, 0, 170, 0.55);
+  background: linear-gradient(180deg, rgba(255, 0, 170, 0.22), rgba(0, 255, 255, 0.10));
+}
+.btn--settings:hover {
+  border-color: rgba(0, 255, 255, 0.55);
+  background: linear-gradient(180deg, rgba(0, 255, 255, 0.18), rgba(255, 176, 0, 0.10));
 }
 .btn--danger {
   border-color: rgba(255, 77, 109, 0.55);
@@ -573,9 +581,9 @@ dialog.dialog--winner::backdrop {
   pointer-events: none;
   filter: hue-rotate(0deg);
   will-change: filter;
-  animation: rgbBorder 6.5s linear infinite;
+  animation: rgb-border 6.5s linear infinite;
 }
-@keyframes rgbBorder {
+@keyframes rgb-border {
   to { filter: hue-rotate(360deg); }
 }
 .winner__frame::after {
@@ -600,10 +608,10 @@ dialog.dialog--winner::backdrop {
     radial-gradient(closest-side, rgba(255,255,255,0.12), transparent 70%);
   filter: blur(1px);
   opacity: 0.95;
-  animation: winnerFxIn 520ms ease-out both;
+  animation: winner-fx-in 520ms ease-out both;
   pointer-events: none;
 }
-@keyframes winnerFxIn {
+@keyframes winner-fx-in {
   0% { transform: translateY(-18px) scale(0.98); opacity: 0; }
   100% { transform: translateY(0) scale(1); opacity: 1; }
 }
@@ -714,7 +722,7 @@ dialog.dialog--winner::backdrop {
   border-radius: 2px;
   opacity: 0.9;
   transform: translateY(-30px) rotate(0deg);
-  animation: confettiFall 950ms ease-out both;
+  animation: confetti-fall 950ms ease-out both;
   box-shadow: 0 8px 20px rgba(0,0,0,0.18);
 }
 .winner__confetti .c:nth-child(1) { left: 10%; background: rgba(255,176,0,0.95); animation-delay: 20ms; }
@@ -729,7 +737,7 @@ dialog.dialog--winner::backdrop {
 .winner__confetti .c:nth-child(10) { left: 82%; background: rgba(255,176,0,0.80); animation-delay: 160ms; }
 .winner__confetti .c:nth-child(11) { left: 90%; background: rgba(69,243,195,0.80); animation-delay: 120ms; }
 .winner__confetti .c:nth-child(12) { left: 96%; background: rgba(255,255,255,0.65); animation-delay: 180ms; }
-@keyframes confettiFall {
+@keyframes confetti-fall {
   0% { transform: translateY(-40px) rotate(0deg); opacity: 0; }
   10% { opacity: 0.95; }
   100% { transform: translateY(320px) rotate(210deg); opacity: 0; }
@@ -835,7 +843,7 @@ dialog.dialog--settings::backdrop {
   mask-composite: exclude;
   pointer-events: none;
   filter: hue-rotate(0deg);
-  animation: rgbBorder 6.5s linear infinite;
+  animation: rgb-border 6.5s linear infinite;
 }
 .twModal__header {
   display: flex;
