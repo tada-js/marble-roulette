@@ -198,9 +198,13 @@ function renderBallCards() {
     const meta = document.createElement("div");
     meta.className = "ball-meta";
     const name = document.createElement("div");
-    name.className = "ball-name";
-    name.textContent = b.name;
-    name.title = b.name;
+    name.className = "ball-name tooltip";
+    name.setAttribute("data-tip", b.name);
+    name.setAttribute("aria-label", b.name);
+    const nameText = document.createElement("span");
+    nameText.className = "ball-name__text";
+    nameText.textContent = b.name;
+    name.appendChild(nameText);
     const id = document.createElement("div");
     id.className = "ball-id";
     id.textContent = b.id;
