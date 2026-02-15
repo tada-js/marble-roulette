@@ -3,6 +3,17 @@ export function makeRenderer(canvas, { board }) {
   if (!ctx) throw new Error("2D context not available");
 
   const dpr = () => Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  const bootMs = performance.now();
+  const hashStr = (s) => {
+    // Small deterministic hash for stable per-entity color offsets.
+    let h = 2166136261 >>> 0;
+    const str = String(s || "");
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+  };
   const view = {
     scale: 1,
     ox: 0,
@@ -10,6 +21,16 @@ export function makeRenderer(canvas, { board }) {
     cameraY: 0,
     viewHWorld: board.worldH,
     cameraOverrideY: null
+  };
+
+  const bgCache = {
+    base: null,
+    baseCtx: null,
+    w: 0,
+    h: 0,
+    stripePattern: null,
+    gridPattern: null,
+    patternSeed: 0,
   };
 
   function resizeToFit() {
@@ -40,54 +61,180 @@ export function makeRenderer(canvas, { board }) {
     gridB: "rgba(255,255,255,0.02)"
   };
 
-  function drawBoardBase() {
-    // Background in canvas: subtle grid + vignette.
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
+  function makeCanvas(w, h) {
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, w | 0);
+    c.height = Math.max(1, h | 0);
+    return c;
+  }
 
+  function ensureBgCache(cssW, cssH) {
+    if (!bgCache.base || bgCache.w !== cssW || bgCache.h !== cssH) {
+      bgCache.w = cssW | 0;
+      bgCache.h = cssH | 0;
+      bgCache.base = makeCanvas(bgCache.w, bgCache.h);
+      bgCache.baseCtx = bgCache.base.getContext("2d");
+      bgCache.stripePattern = null;
+      bgCache.gridPattern = null;
+      bgCache.patternSeed = (bgCache.patternSeed + 1) | 0;
+    }
+
+    const bctx = bgCache.baseCtx;
+    if (bctx && !bgCache.stripePattern) {
+      // Diagonal stripe pattern (pre-rendered for performance).
+      const p = makeCanvas(140, 140);
+      const pctx = p.getContext("2d");
+      if (pctx) {
+        pctx.clearRect(0, 0, p.width, p.height);
+        pctx.globalAlpha = 1;
+        pctx.strokeStyle = "rgba(255,255,255,0.10)";
+        pctx.lineWidth = 18;
+        for (let i = -p.height; i < p.width + p.height; i += 70) {
+          pctx.beginPath();
+          pctx.moveTo(i, 0);
+          pctx.lineTo(i + p.height, p.height);
+          pctx.stroke();
+        }
+      }
+      bgCache.stripePattern = bctx.createPattern(p, "repeat");
+    }
+
+    if (bctx && !bgCache.gridPattern) {
+      // Neon grid pattern (pre-rendered).
+      const p = makeCanvas(128, 128);
+      const pctx = p.getContext("2d");
+      if (pctx) {
+        pctx.clearRect(0, 0, p.width, p.height);
+        pctx.lineWidth = 1;
+
+        // Fine grid.
+        pctx.strokeStyle = "rgba(0,255,255,0.10)";
+        for (let x = 0; x <= p.width; x += 16) {
+          pctx.beginPath();
+          pctx.moveTo(x + 0.5, 0);
+          pctx.lineTo(x + 0.5, p.height);
+          pctx.stroke();
+        }
+        for (let y = 0; y <= p.height; y += 16) {
+          pctx.beginPath();
+          pctx.moveTo(0, y + 0.5);
+          pctx.lineTo(p.width, y + 0.5);
+          pctx.stroke();
+        }
+
+        // Stronger major lines.
+        pctx.strokeStyle = "rgba(255,0,170,0.14)";
+        pctx.lineWidth = 2;
+        for (let x = 0; x <= p.width; x += 64) {
+          pctx.beginPath();
+          pctx.moveTo(x + 1, 0);
+          pctx.lineTo(x + 1, p.height);
+          pctx.stroke();
+        }
+        for (let y = 0; y <= p.height; y += 64) {
+          pctx.beginPath();
+          pctx.moveTo(0, y + 1);
+          pctx.lineTo(p.width, y + 1);
+          pctx.stroke();
+        }
+      }
+      bgCache.gridPattern = bctx.createPattern(p, "repeat");
+    }
+
+    // Render base layer once per size change.
+    if (bctx && bgCache.base && bgCache.patternSeed) {
+      // Use patternSeed to avoid redrawing every call; redraw only after cache reset.
+      // Decrement to mark it "drawn".
+      bgCache.patternSeed = 0;
+      bctx.clearRect(0, 0, bgCache.w, bgCache.h);
+
+      const g = bctx.createLinearGradient(0, 0, 0, bgCache.h);
+      g.addColorStop(0, "#06102a");
+      g.addColorStop(0.5, "#071a3c");
+      g.addColorStop(1, "#040a18");
+      bctx.fillStyle = g;
+      bctx.fillRect(0, 0, bgCache.w, bgCache.h);
+
+      if (bgCache.stripePattern) {
+        bctx.save();
+        bctx.globalAlpha = 0.08;
+        bctx.fillStyle = bgCache.stripePattern;
+        bctx.fillRect(0, 0, bgCache.w, bgCache.h);
+        bctx.restore();
+      }
+
+      // Gentle vignette.
+      const v = bctx.createRadialGradient(bgCache.w * 0.5, bgCache.h * 0.35, 30, bgCache.w * 0.5, bgCache.h * 0.45, bgCache.h * 0.85);
+      v.addColorStop(0, "rgba(255,255,255,0.05)");
+      v.addColorStop(1, "rgba(0,0,0,0.55)");
+      bctx.fillStyle = v;
+      bctx.fillRect(0, 0, bgCache.w, bgCache.h);
+    }
+  }
+
+  function drawBoardBase(tSec = 0) {
+    // Use real time so the background animates even when the simulation is paused (menu, dialogs, etc).
+    const rt = (performance.now() - bootMs) / 1000;
+    const tt = (Number.isFinite(tSec) ? tSec : 0) + rt * 0.85;
+
+    // Background (optimized): cached base + a couple of animated haze layers + a scrolling neon grid pattern.
     const cssW = canvas.clientWidth || board.worldW;
     const cssH = canvas.clientHeight || board.worldH;
+    ensureBgCache(cssW, cssH);
 
-    const g = ctx.createLinearGradient(0, 0, 0, cssH);
-    g.addColorStop(0, "#0a1224");
-    g.addColorStop(1, "#111b33");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, cssW, cssH);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (bgCache.base) ctx.drawImage(bgCache.base, 0, 0);
 
-    ctx.globalAlpha = 1;
-    const step = 26;
-    for (let x = 0; x < cssW; x += step) {
-      ctx.strokeStyle = x % (step * 2) === 0 ? bg.gridA : bg.gridB;
-      ctx.beginPath();
-      ctx.moveTo(x + 0.5, 0);
-      ctx.lineTo(x + 0.5, cssH);
-      ctx.stroke();
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+
+    // Animated neon haze (2 gradients only).
+    {
+      const p0 = tt * 0.28;
+      const p1 = tt * 0.22 + 1.7;
+      const x0 = cssW * (0.30 + 0.08 * Math.sin(p0));
+      const y0 = cssH * (0.22 + 0.06 * Math.cos(p0 * 1.2));
+      const x1 = cssW * (0.72 + 0.08 * Math.cos(p1));
+      const y1 = cssH * (0.62 + 0.06 * Math.sin(p1 * 1.1));
+
+      const g0 = ctx.createRadialGradient(x0, y0, 18, x0, y0, Math.max(cssW, cssH) * 0.62);
+      g0.addColorStop(0, "rgba(0,255,255,0.12)");
+      g0.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g0;
+      ctx.fillRect(0, 0, cssW, cssH);
+
+      const g1 = ctx.createRadialGradient(x1, y1, 20, x1, y1, Math.max(cssW, cssH) * 0.72);
+      g1.addColorStop(0, "rgba(255,0,170,0.10)");
+      g1.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g1;
+      ctx.fillRect(0, 0, cssW, cssH);
     }
-    for (let y = 0; y < cssH; y += step) {
-      ctx.strokeStyle = y % (step * 2) === 0 ? bg.gridA : bg.gridB;
-      ctx.beginPath();
-      ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(cssW, y + 0.5);
-      ctx.stroke();
-    }
 
-    const v = ctx.createRadialGradient(cssW * 0.5, cssH * 0.35, 30, cssW * 0.5, cssH * 0.45, cssH * 0.75);
-    v.addColorStop(0, "rgba(255,255,255,0.06)");
-    v.addColorStop(1, "rgba(0,0,0,0.35)");
-    ctx.fillStyle = v;
-    ctx.fillRect(0, 0, cssW, cssH);
+    // Scrolling neon grid overlay (pattern fill).
+    if (bgCache.gridPattern) {
+      const dx = -(tt * 22) % 128;
+      const dy = (tt * 34) % 128;
+      ctx.save();
+      ctx.globalAlpha = 0.45 + 0.10 * Math.sin(tt * 0.6);
+      ctx.translate(dx, dy);
+      ctx.fillStyle = bgCache.gridPattern;
+      ctx.fillRect(-128, -128, cssW + 256, cssH + 256);
+      ctx.restore();
+    }
 
     ctx.restore();
   }
 
   function draw(state, ballsCatalog, imagesById) {
-    drawBoardBase();
+    drawBoardBase(state?.t || 0);
+
+    // Shared FX time for hue cycling (keeps animating even when game is paused).
+    const fxT = ((performance.now() - bootMs) / 1000) + (state?.t || 0);
 
     // Camera:
-    // - default: auto-follow the slowest (smallest y) unfinished marble so the "last finisher" stays in view.
-    // - manual: user clicks minimap -> cameraOverrideY.
-    // Camera never moves upward in auto mode to avoid disorienting jumps.
-    if (state.mode === "playing" && typeof view.cameraOverrideY === "number") {
+    // - manual: minimap / view lock can set cameraOverrideY (works even before starting).
+    // - auto: in-play, follow the "tail" (smallest y among not-finished marbles).
+    if (typeof view.cameraOverrideY === "number") {
       view.cameraY = clamp(view.cameraOverrideY, 0, Math.max(0, board.worldH - view.viewHWorld));
     } else if (state.mode === "playing" && state.released) {
       let targetY = 0;
@@ -99,9 +246,10 @@ export function makeRenderer(canvas, { board }) {
           found = true;
         }
       }
-      if (!found) targetY = board.worldH - board.slotH - view.viewHWorld;
-      const desired = clamp(targetY - view.viewHWorld * 0.35, 0, Math.max(0, board.worldH - view.viewHWorld));
-      view.cameraY = Math.max(view.cameraY, desired);
+      if (!found) targetY = board.worldH;
+      const desired = clamp(targetY - view.viewHWorld * 0.22, 0, Math.max(0, board.worldH - view.viewHWorld));
+      // Smooth motion to reduce jitter when the tail bounces.
+      view.cameraY = view.cameraY + (desired - view.cameraY) * 0.14;
     } else {
       view.cameraY = 0;
     }
@@ -112,12 +260,25 @@ export function makeRenderer(canvas, { board }) {
     ctx.translate(0, -view.cameraY);
 
     // Board frame.
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = "rgba(255,255,255,0.22)";
-    ctx.fillStyle = "rgba(255,255,255,0.02)";
-    roundRect(ctx, 10, 10, board.worldW - 20, board.worldH - 20, 24);
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.55)";
+    ctx.shadowBlur = 30;
+    ctx.shadowOffsetY = 18;
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    roundRect(ctx, 8, 8, board.worldW - 16, board.worldH - 16, 26);
     ctx.fill();
+    ctx.restore();
+
+    // Chrome rim + inner glass.
+    roundRect(ctx, 10, 10, board.worldW - 20, board.worldH - 20, 26);
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
     ctx.stroke();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "rgba(69,243,195,0.18)";
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.018)";
+    ctx.fill();
 
     const fixedEntities = board.roulette?.entities?.length
       ? board.roulette.entities
@@ -128,11 +289,10 @@ export function makeRenderer(canvas, { board }) {
     // Fixed map polylines (walls / dividers).
     if (fixedEntities) {
       ctx.save();
-      ctx.strokeStyle = "rgba(255,255,255,0.55)";
-      ctx.lineWidth = 6;
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
-      ctx.setLineDash([12, 10]);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
       for (const e of fixedEntities) {
         if (e.type === "polyline" && Array.isArray(e.points) && e.points.length >= 2) {
           const y0e = e.points[0][1];
@@ -140,13 +300,50 @@ export function makeRenderer(canvas, { board }) {
           if (Math.max(y0e, y1e) < view.cameraY - 200 || Math.min(y0e, y1e) > view.cameraY + view.viewHWorld + 200) {
             continue;
           }
+          // Outer rubber.
+          ctx.shadowColor = "rgba(0,0,0,0.35)";
+          ctx.shadowBlur = 10;
+          ctx.lineWidth = 11;
+          ctx.strokeStyle = "rgba(0,0,0,0.42)";
+          ctx.beginPath();
+          ctx.moveTo(e.points[0][0], e.points[0][1]);
+          for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
+          ctx.stroke();
+
+          // Neon rail: animated RGB sign gradient.
+          const x0 = e.points[0][0];
+          const y0 = e.points[0][1];
+          const x1 = e.points[e.points.length - 1][0];
+          const y1 = e.points[e.points.length - 1][1];
+          const hOff = (hashStr(e.id) % 360) | 0;
+          const h0 = (fxT * 42 + hOff) % 360;
+          const h1 = (h0 + 120) % 360;
+          const h2 = (h0 + 240) % 360;
+          const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+          grad.addColorStop(0, `hsla(${h0}, 100%, 64%, 0.70)`);
+          grad.addColorStop(0.5, `hsla(${h1}, 100%, 64%, 0.70)`);
+          grad.addColorStop(1, `hsla(${h2}, 100%, 64%, 0.70)`);
+
+          ctx.shadowColor = `hsla(${h0}, 100%, 62%, 0.95)`;
+          ctx.shadowBlur = 24;
+          ctx.lineWidth = 7.5;
+          ctx.strokeStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(e.points[0][0], e.points[0][1]);
+          for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
+          ctx.stroke();
+
+          // Hot highlight for that "pinball rail" punch.
+          ctx.shadowColor = `hsla(${h1}, 100%, 70%, 0.55)`;
+          ctx.shadowBlur = 16;
+          ctx.lineWidth = 3.2;
+          ctx.strokeStyle = "rgba(255,255,255,0.78)";
           ctx.beginPath();
           ctx.moveTo(e.points[0][0], e.points[0][1]);
           for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
           ctx.stroke();
         }
       }
-      ctx.setLineDash([]);
       ctx.restore();
 
       // Static boxes (cyan obstacles) like the reference.
@@ -168,8 +365,6 @@ export function makeRenderer(canvas, { board }) {
     // Zigzag propellers.
     if (board.zigzag?.propellers?.length) {
       ctx.save();
-      ctx.strokeStyle = "rgba(255, 176, 0, 0.85)";
-      ctx.lineWidth = 8;
       ctx.lineCap = "round";
       for (const p of board.zigzag.propellers) {
         if (p.y < view.cameraY - 260 || p.y > view.cameraY + view.viewHWorld + 260) continue;
@@ -178,16 +373,47 @@ export function makeRenderer(canvas, { board }) {
         const s = Math.sin(ang);
         const hx = (p.len / 2) * c;
         const hy = (p.len / 2) * s;
+        // Rubber + highlight.
+        ctx.shadowColor = "rgba(255,176,0,0.45)";
+        ctx.shadowBlur = 14;
+        ctx.lineWidth = 14;
+        ctx.strokeStyle = "rgba(0,0,0,0.42)";
+        ctx.beginPath();
+        ctx.moveTo(p.x - hx, p.y - hy);
+        ctx.lineTo(p.x + hx, p.y + hy);
+        ctx.stroke();
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = "rgba(255, 176, 0, 0.88)";
         ctx.beginPath();
         ctx.moveTo(p.x - hx, p.y - hy);
         ctx.lineTo(p.x + hx, p.y + hy);
         ctx.stroke();
 
         // Hub.
-        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = 0;
+        const hg = ctx.createRadialGradient(p.x - 4, p.y - 6, 2, p.x, p.y, 18);
+        hg.addColorStop(0, "rgba(255,255,255,0.35)");
+        hg.addColorStop(1, "rgba(0,0,0,0.55)");
+        ctx.fillStyle = hg;
         ctx.beginPath();
         ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
         ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Zigzag circular rotors (early section).
+    if (board.zigzag?.rotors?.length) {
+      ctx.save();
+      ctx.lineWidth = 4;
+      for (const r of board.zigzag.rotors) {
+        if (r.y < view.cameraY - 260 || r.y > view.cameraY + view.viewHWorld + 260) continue;
+        ctx.strokeStyle = "rgba(255, 176, 0, 0.70)";
+        ctx.fillStyle = "rgba(255, 176, 0, 0.08)";
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
       }
       ctx.restore();
     }
@@ -257,32 +483,7 @@ export function makeRenderer(canvas, { board }) {
       ctx.stroke();
     }
 
-    // Slot zone.
-    const y0 = board.worldH - board.slotH;
-    ctx.fillStyle = "rgba(255,255,255,0.03)";
-    roundRect(ctx, 18, y0 + 12, board.worldW - 36, board.slotH - 24, 18);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
-    ctx.stroke();
-
-    // Slot dividers & labels.
-    ctx.font = "700 14px ui-monospace, Menlo, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    for (let i = 0; i < board.slotCount; i++) {
-      const x = i * board.slotW;
-      if (i !== 0) {
-        ctx.strokeStyle = "rgba(255,255,255,0.10)";
-        ctx.beginPath();
-        ctx.moveTo(x, y0);
-        ctx.lineTo(x, board.worldH - 16);
-        ctx.stroke();
-      }
-      const cx = x + board.slotW / 2;
-      const cy = y0 + board.slotH * 0.58;
-      ctx.fillStyle = "rgba(255,255,255,0.70)";
-      ctx.fillText(board.slots[i].label, cx, cy);
-    }
+    // Slot visuals removed: we only show the final (last) result via UI/modal.
 
     // Pegs.
     if (board.pegRows && board.pegRows.length) {
@@ -293,137 +494,35 @@ export function makeRenderer(canvas, { board }) {
       for (let rr = r0; rr <= r1; rr++) {
         const row = board.pegRows[rr];
         for (const p of row) {
-          ctx.fillStyle = "rgba(255,255,255,0.70)";
+          // Bumper: chrome rim + neon core.
+          const r = p.r;
+          ctx.shadowColor = "rgba(69,243,195,0.25)";
+          ctx.shadowBlur = 10;
+          const rim = ctx.createRadialGradient(p.x - r * 0.25, p.y - r * 0.35, 1, p.x, p.y, r * 1.4);
+          rim.addColorStop(0, "rgba(255,255,255,0.80)");
+          rim.addColorStop(1, "rgba(0,0,0,0.55)");
+          ctx.fillStyle = rim;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, r + 3, 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = "rgba(0,0,0,0.22)";
+
+          const core = ctx.createRadialGradient(p.x - r * 0.2, p.y - r * 0.2, 2, p.x, p.y, r);
+          core.addColorStop(0, "rgba(255,255,255,0.20)");
+          core.addColorStop(1, "rgba(69,243,195,0.18)");
+          ctx.fillStyle = core;
           ctx.beginPath();
-          ctx.arc(p.x - 2.5, p.y - 2.5, Math.max(2, p.r * 0.45), 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.fill();
         }
       }
     }
 
-    // Chaos objects (bumpers/spinners/portals/wind zones).
-    if (state.chaos?.enabled) {
-      // Wind zones as faint bands.
-      for (const z of state.chaos.windZones || []) {
-        if (z.y1 < view.cameraY || z.y0 > view.cameraY + view.viewHWorld) continue;
-        ctx.fillStyle = "rgba(69, 243, 195, 0.07)";
-        ctx.fillRect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0);
-
-        // Direction arrows (animated).
-        const midY = (z.y0 + z.y1) / 2;
-        ctx.strokeStyle = "rgba(69, 243, 195, 0.28)";
-        ctx.lineWidth = 2;
-        const arrowStep = 90;
-        const shift = (state.t * 90) % arrowStep;
-        for (let x = z.x0 + 14 + shift; x < z.x1 - 14; x += arrowStep) {
-          const dir = Math.sin(z.phase + state.t * z.freq) >= 0 ? 1 : -1;
-          drawArrow(ctx, x, midY, dir);
-        }
-      }
-
-      // Bumpers.
-      for (const o of state.chaos.bumpers || []) {
-        if (o.y < view.cameraY - 120 || o.y > view.cameraY + view.viewHWorld + 120) continue;
-        const pulse = 0.55 + 0.45 * Math.sin(state.t * 4 + o.x * 0.01);
-        ctx.fillStyle = `rgba(255, 176, 0, ${0.12 + 0.10 * pulse})`;
-        ctx.strokeStyle = `rgba(255, 176, 0, ${0.70 + 0.20 * pulse})`;
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        // Simple "X" marker.
-        ctx.strokeStyle = "rgba(0,0,0,0.28)";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(o.x - o.r * 0.55, o.y - o.r * 0.55);
-        ctx.lineTo(o.x + o.r * 0.55, o.y + o.r * 0.55);
-        ctx.moveTo(o.x - o.r * 0.55, o.y + o.r * 0.55);
-        ctx.lineTo(o.x + o.r * 0.55, o.y - o.r * 0.55);
-        ctx.stroke();
-      }
-
-      // Spinners.
-      for (const o of state.chaos.spinners || []) {
-        if (o.y < view.cameraY - 120 || o.y > view.cameraY + view.viewHWorld + 120) continue;
-        ctx.fillStyle = "rgba(125, 243, 211, 0.08)";
-        ctx.strokeStyle = "rgba(125, 243, 211, 0.75)";
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        // Rotating bar + arrow head.
-        const ang = (state.t * 2.2 * o.dir) % (Math.PI * 2);
-        const ax = Math.cos(ang) * o.r * 0.72;
-        const ay = Math.sin(ang) * o.r * 0.72;
-        ctx.beginPath();
-        ctx.moveTo(o.x - ax, o.y - ay);
-        ctx.lineTo(o.x + ax, o.y + ay);
-        ctx.stroke();
-        ctx.fillStyle = "rgba(125, 243, 211, 0.85)";
-        ctx.beginPath();
-        ctx.arc(o.x + ax, o.y + ay, 4.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Portals.
-      for (const p of state.chaos.portals || []) {
-        const ends = [
-          { end: p.a, label: "A" },
-          { end: p.b, label: "B" }
-        ];
-        for (const { end, label } of ends) {
-          if (end.y < view.cameraY - 120 || end.y > view.cameraY + view.viewHWorld + 120) continue;
-          const swirl = (state.t * 2.6) % (Math.PI * 2);
-          ctx.lineWidth = 4;
-          ctx.setLineDash([]);
-          // Outer ring.
-          ctx.strokeStyle = "rgba(202, 160, 255, 0.85)";
-          ctx.beginPath();
-          ctx.arc(end.x, end.y, end.r, 0, Math.PI * 2);
-          ctx.stroke();
-          // Inner swirl (dashed).
-          ctx.strokeStyle = "rgba(202, 160, 255, 0.55)";
-          ctx.setLineDash([10, 8]);
-          ctx.beginPath();
-          ctx.arc(end.x, end.y, end.r * 0.72, swirl, swirl + Math.PI * 1.6);
-          ctx.stroke();
-          ctx.setLineDash([]);
-
-          // Label.
-          ctx.fillStyle = "rgba(0,0,0,0.35)";
-          ctx.beginPath();
-          ctx.arc(end.x, end.y, 12, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "rgba(255,255,255,0.95)";
-          ctx.font = "900 14px ui-monospace, Menlo, monospace";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(label, end.x, end.y + 0.5);
-        }
-      }
-    }
-
-    // Drop guide.
-    if (state.mode === "playing") {
-      ctx.strokeStyle = "rgba(255, 176, 0, 0.50)";
-      ctx.lineWidth = 3;
-      ctx.setLineDash([10, 10]);
-      ctx.beginPath();
-      // In world coords.
-      ctx.moveTo(state.dropX, view.cameraY + 10);
-      ctx.lineTo(state.dropX, y0 - 30);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
+    // Drop guide removed (no click-to-set drop position).
 
     // Marbles (pending + active).
     for (const m of [...(state.pending || []), ...state.marbles]) {
+      // Hide finished marbles to avoid clutter when 100+ arrive.
+      if (m.done) continue;
       const meta = ballsCatalog.find((b) => b.id === m.ballId);
       const img = imagesById.get(m.ballId);
       const r = m.r;
@@ -457,6 +556,25 @@ export function makeRenderer(canvas, { board }) {
         ctx.fillRect(-r, -r, r * 2, r * 2);
       }
       ctx.restore();
+
+      // Arrival order badge for the single-slot mode.
+      if (board.slotCount === 1 && m.done && m.result?.label) {
+        const txt = String(m.result.label);
+        const fontSize = Math.max(11, Math.min(18, r * 0.95));
+        ctx.font = `800 ${fontSize}px ui-monospace, Menlo, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        // Small plate for contrast over photos.
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(12, r * 0.62), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(255,255,255,0.55)";
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.fillText(txt, 0, 0);
+      }
 
       // Glint.
       const gl = ctx.createRadialGradient(-r * 0.35, -r * 0.35, 1, -r * 0.35, -r * 0.35, r * 1.1);

@@ -2,7 +2,6 @@ import { DEFAULT_BALLS } from "../game/assets.js";
 
 const KEY = "marble-roulette:balls:v1";
 const COUNTS_KEY = "marble-roulette:ball-counts:v1";
-const CHAOS_KEY = "marble-roulette:chaos-enabled:v1";
 
 export function loadBallsCatalog() {
   try {
@@ -58,18 +57,4 @@ export function loadBallCounts(ballsCatalog) {
 
 export function saveBallCounts(counts) {
   localStorage.setItem(COUNTS_KEY, JSON.stringify(counts));
-}
-
-export function loadChaosEnabled() {
-  try {
-    const raw = localStorage.getItem(CHAOS_KEY);
-    if (raw === null) return true;
-    return raw === "1";
-  } catch {
-    return true;
-  }
-}
-
-export function saveChaosEnabled(v) {
-  localStorage.setItem(CHAOS_KEY, v ? "1" : "0");
 }

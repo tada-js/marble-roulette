@@ -10,58 +10,103 @@
     <div id="app">
       <header class="topbar">
         <div class="brand">
-          <div class="brand__title">Marble Roulette</div>
-          <div class="brand__subtitle">Pinball ladder with friendly animals</div>
+          <div class="brand__title">마블 룰렛</div>
+          <div class="brand__subtitle">동물 공으로 즐기는 핀볼 사다리</div>
         </div>
         <div class="topbar__actions">
-          <button id="settings-btn" class="btn btn--ghost" type="button">Settings</button>
-          <button id="reset-btn" class="btn btn--ghost" type="button">Reset</button>
+          <button id="settings-btn" class="btn btn--ghost" type="button">설정</button>
+          <button id="bgm-btn" class="btn btn--ghost" type="button" aria-pressed="false">BGM 끔</button>
+          <button id="reset-btn" class="btn btn--ghost" type="button">초기화</button>
+          <button id="winner-btn" class="btn btn--ghost" type="button" disabled>마지막 결과</button>
+          <span class="topbar__divider" aria-hidden="true"></span>
+          <button id="start-btn" class="btn btn--primary topbar__start" type="button">시작</button>
         </div>
       </header>
 
       <main class="stage">
         <div class="hud">
-          <button id="start-btn" class="btn btn--primary" type="button">Start</button>
-          <button id="drop-btn" class="btn btn--accent" type="button" disabled>DROP</button>
-          <button id="chaos-btn" class="btn btn--ghost" type="button">Chaos: On</button>
           <div class="mini">
             <div class="mini__row">
-              <div class="mini__title">Mini Map</div>
-              <button id="follow-btn" class="btn btn--ghost" type="button" disabled>Follow</button>
+              <div class="mini__title" id="minimap-title">미니맵</div>
+              <label class="switch" title="켜면 현재 시점을 고정합니다. 끄면 자동 추적으로 돌아갑니다.">
+                <span class="switch__label">시점 고정</span>
+                <input id="view-lock" class="switch__input" type="checkbox" role="switch" disabled />
+                <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+              </label>
             </div>
             <canvas id="minimap" width="260" height="190"></canvas>
-            <div class="mini__hint" id="minimap-hint">Click map to jump. Follow resumes auto-tracking.</div>
-            <div class="legend" aria-label="Legend">
-              <div class="legend__item"><span class="legend__swatch legend__swatch--bumper"></span><span>Bumper</span></div>
-              <div class="legend__item"><span class="legend__swatch legend__swatch--spinner"></span><span>Spinner</span></div>
-              <div class="legend__item"><span class="legend__swatch legend__swatch--portal"></span><span>Portal</span></div>
-              <div class="legend__item"><span class="legend__swatch legend__swatch--wind"></span><span>Wind</span></div>
-            </div>
+            <div class="mini__hint" id="minimap-hint">미니맵을 클릭해 이동. 후미 추적으로 자동 추적을 재개합니다.</div>
           </div>
           <div class="hud__hint" id="hint">
-            Click the board to set drop position. Then press DROP.
+            시작을 누르면 선택한 공이 한 번에 떨어집니다.
           </div>
           <div class="balls" id="balls"></div>
           <div class="result" id="result" aria-live="polite"></div>
         </div>
 
-        <canvas id="game" width="900" height="1350"></canvas>
+        <div class="board">
+          <canvas id="game" width="900" height="1350"></canvas>
+          <div class="board__coords">
+            <div class="board__coordText" id="canvas-coord-readout">xFrac: -, yFrac: -</div>
+            <button id="canvas-coord-copy" class="btn btn--ghost board__copy" type="button" disabled>좌표 복사</button>
+          </div>
+        </div>
       </main>
     </div>
 
-    <dialog id="settings-dialog" class="dialog">
-      <form method="dialog" class="dialog__card" id="settings-form">
-        <div class="dialog__header">
-          <div class="dialog__title">Ball Settings</div>
-          <button class="btn btn--ghost" value="close" type="submit">Close</button>
+    <dialog id="settings-dialog" class="dialog dialog--settings">
+      <form method="dialog" class="settingsModal" id="settings-form">
+        <div class="winner__frame winner__frame--settings">
+          <div class="winner__fx" aria-hidden="true"></div>
+          <button class="winner__close" value="close" type="submit" aria-label="닫기">×</button>
+
+          <div class="winner__badge">설정</div>
+          <div class="winner__title">공 설정</div>
+          <div class="winner__sub">이름/이미지를 바꾸고 수량을 조절할 수 있어요.</div>
+
+          <div class="settings__list settings__list--modal" id="settings-list"></div>
+
+          <div class="settings__actions settings__actions--modal">
+            <button id="add-ball" class="btn btn--ghost" type="button">공 추가</button>
+            <button id="restore-defaults" class="btn btn--ghost" type="button">기본값 복원</button>
+          </div>
         </div>
-        <div class="dialog__body">
-          <div class="settings__list" id="settings-list"></div>
-          <div class="settings__actions">
-            <button id="restore-defaults" class="btn btn--ghost" type="button">Restore defaults</button>
-            <div class="settings__note">
-              Changes are saved in your browser (localStorage).
+      </form>
+    </dialog>
+
+    <dialog id="winner-dialog" class="dialog dialog--winner">
+      <form method="dialog" class="winner" id="winner-form">
+        <div class="winner__frame">
+          <div class="winner__fx" aria-hidden="true"></div>
+          <div class="winner__confetti" aria-hidden="true">
+            <span class="c"></span><span class="c"></span><span class="c"></span><span class="c"></span>
+            <span class="c"></span><span class="c"></span><span class="c"></span><span class="c"></span>
+            <span class="c"></span><span class="c"></span><span class="c"></span><span class="c"></span>
+          </div>
+          <button class="winner__close" value="close" type="submit" aria-label="닫기">×</button>
+
+          <div class="winner__badge">마지막 도착</div>
+          <div class="winner__title" id="winner-title"></div>
+          <div class="winner__sub" id="winner-sub"></div>
+
+          <div class="winner__grid">
+            <div class="winner__thumb">
+              <img id="winner-img" alt="" />
             </div>
+            <div class="winner__meta">
+              <div class="winner__metaRow">
+                <div class="winner__metaK">공</div>
+                <div class="winner__metaV" id="winner-name"></div>
+              </div>
+              <div class="winner__metaRow">
+                <div class="winner__metaK">도착 순서</div>
+                <div class="winner__metaV" id="winner-order"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="winner__actions">
+            <button class="btn btn--primary" value="close" type="submit">확인</button>
           </div>
         </div>
       </form>

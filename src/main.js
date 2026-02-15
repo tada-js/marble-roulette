@@ -3,7 +3,6 @@ import {
   makeGameState,
   makeRng,
   resetGame,
-  setDropX,
   snapshotForText,
   startGame,
   step,
@@ -13,37 +12,102 @@ import {
   setBallCount
 } from "./game/engine.js";
 import { makeRenderer } from "./game/render.js";
-import { loadBallsCatalog, loadBallCounts, loadChaosEnabled, saveBallsCatalog, saveBallCounts, saveChaosEnabled } from "./ui/storage.js";
+import { loadBallsCatalog, loadBallCounts, saveBallsCatalog, saveBallCounts } from "./ui/storage.js";
 import { mountSettingsDialog } from "./ui/settings.js";
 
 const canvas = document.getElementById("game");
 const startBtn = document.getElementById("start-btn");
-const dropBtn = document.getElementById("drop-btn");
-const chaosBtn = document.getElementById("chaos-btn");
 const resetBtn = document.getElementById("reset-btn");
 const settingsBtn = document.getElementById("settings-btn");
+const bgmBtn = document.getElementById("bgm-btn");
+const winnerBtn = document.getElementById("winner-btn");
 const ballsEl = document.getElementById("balls");
 const resultEl = document.getElementById("result");
 const hintEl = document.getElementById("hint");
 const minimap = document.getElementById("minimap");
-const followBtn = document.getElementById("follow-btn");
+const viewLockEl = document.getElementById("view-lock");
 const minimapHintEl = document.getElementById("minimap-hint");
-const legendEl = document.querySelector(".legend");
+const canvasCoordReadoutEl = document.getElementById("canvas-coord-readout");
+const canvasCoordCopyBtn = document.getElementById("canvas-coord-copy");
+const minimapTitleEl = document.getElementById("minimap-title");
+
+function syncVisualViewportHeight() {
+  // Mobile browsers: 100vh often includes dynamic browser chrome; use the visual viewport height instead.
+  const vv = window.visualViewport;
+  const h = vv?.height || window.innerHeight || document.documentElement.clientHeight;
+  document.documentElement.style.setProperty("--appH", `${Math.round(h)}px`);
+}
 
 const settingsDialog = document.getElementById("settings-dialog");
 const settingsList = document.getElementById("settings-list");
 const restoreDefaultsBtn = document.getElementById("restore-defaults");
+const addBallBtn = document.getElementById("add-ball");
 
-const board = makeBoard({ layout: "zigzag", heightMultiplier: 10, elementScale: 0.85 });
+const winnerDialog = document.getElementById("winner-dialog");
+const winnerImgEl = document.getElementById("winner-img");
+const winnerTitleEl = document.getElementById("winner-title");
+const winnerSubEl = document.getElementById("winner-sub");
+const winnerNameEl = document.getElementById("winner-name");
+const winnerOrderEl = document.getElementById("winner-order");
+
+// Hand-tuned extra rotors can be added here (world coords or xFrac/yFrac in [0..1]).
+// These override the auto-added mid-section rotors (the early rotor ring stays).
+const customRotors = [
+  { xFrac: 0.220, yFrac: 0.629, omega: 11.2 },
+  { xFrac: 0.342, yFrac: 0.629, omega: -11.2 },
+  { xFrac: 0.140, yFrac: 0.722, omega: 11.8 },
+  { xFrac: 0.136, yFrac: 0.713, omega: -11.8 },
+  { xFrac: 0.869, yFrac: 0.713, omega: 12.4 },
+  { xFrac: 0.447, yFrac: 0.227, omega: 12.4 },
+  { xFrac: 0.431, yFrac: 0.221, omega: -12.0 },
+  { xFrac: 0.580, yFrac: 0.221, omega: 12.0 },
+  { xFrac: 0.318, yFrac: 0.280, omega: -11.6 },
+  { xFrac: 0.229, yFrac: 0.277, omega: 11.6 },
+  { xFrac: 0.389, yFrac: 0.277, omega: -11.2 },
+  { xFrac: 0.315, yFrac: 0.161, omega: 12.6 },
+  { xFrac: 0.693, yFrac: 0.161, omega: -12.6 },
+  { xFrac: 0.395, yFrac: 0.177, omega: 11.8 },
+  { xFrac: 0.594, yFrac: 0.177, omega: -11.8 },
+  { xFrac: 0.455, yFrac: 0.523, omega: 11.6 },
+  { xFrac: 0.375, yFrac: 0.233, omega: -12.2 },
+  { xFrac: 0.518, yFrac: 0.233, omega: 12.2 },
+  { xFrac: 0.536, yFrac: 0.352, omega: -11.4 },
+  { xFrac: 0.354, yFrac: 0.413, omega: 11.4 },
+  { xFrac: 0.670, yFrac: 0.629, omega: -12.0 },
+  { xFrac: 0.791, yFrac: 0.629, omega: 12.0 },
+  { xFrac: 0.865, yFrac: 0.722, omega: -12.6 },
+  { xFrac: 0.419, yFrac: 0.529, omega: 11.6 },
+  { xFrac: 0.548, yFrac: 0.471, omega: -11.6 },
+  { xFrac: 0.641, yFrac: 0.474, omega: 11.8 },
+  { xFrac: 0.286, yFrac: 0.259, omega: 12.0 },
+  { xFrac: 0.443, yFrac: 0.262, omega: -12.0 },
+];
+
+// Single finish slot: marbles pile in arrival order. (No per-slot outcomes.)
+const board = makeBoard({ layout: "zigzag", slotCount: 1, heightMultiplier: 10, elementScale: 0.85, customRotors });
 let ballsCatalog = loadBallsCatalog();
 saveBallsCatalog(ballsCatalog);
 
 const state = makeGameState({ seed: 1337, board, ballsCatalog });
 state.counts = loadBallCounts(ballsCatalog);
-// Zigzag map includes its own deterministic mixing (propeller). Keep chaos optional but off by default.
-state.chaos.enabled = board.layout === "zigzag" ? false : loadChaosEnabled();
 const renderer = makeRenderer(canvas, { board });
 const minimapCtx = minimap?.getContext?.("2d");
+
+let lastMinimapFrac = null; // {xFrac,yFrac}
+let lastCanvasFrac = null; // {xFrac,yFrac}
+let pinnedCanvasFrac = null; // {xFrac,yFrac}
+let coordMode = false;
+
+// View mode:
+// - OFF (unchecked): free view (minimap sets a manual camera override)
+// - ON  (checked): tail focus (auto-follow the straggler)
+let tailFocusOn = true;
+
+let lastWinner = null;
+function setWinnerCache(payload) {
+  lastWinner = payload || null;
+  if (winnerBtn) winnerBtn.disabled = !lastWinner;
+}
 
 const imagesById = new Map();
 function refreshImages() {
@@ -75,6 +139,47 @@ const settings = mountSettingsDialog(
   () => ballsCatalog,
   setBalls
 );
+
+function makeNewBall() {
+  const h = Math.floor(Math.random() * 360);
+  const bg0 = `hsl(${h}, 95%, 58%)`;
+  const bg1 = `hsl(${(h + 60) % 360}, 95%, 52%)`;
+  const svg = encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="${bg0}"/>
+          <stop offset="1" stop-color="${bg1}"/>
+        </linearGradient>
+      </defs>
+      <rect width="128" height="128" rx="64" fill="url(#g)"/>
+      <circle cx="64" cy="74" r="38" fill="rgba(255,255,255,0.88)"/>
+      <circle cx="52" cy="72" r="4" fill="#111"/>
+      <circle cx="76" cy="72" r="4" fill="#111"/>
+      <path d="M56 90c7 7 15 7 22 0" fill="none" stroke="rgba(0,0,0,0.28)" stroke-width="6" stroke-linecap="round"/>
+    </svg>`
+  );
+  const idBase = `ball-${Date.now().toString(36)}`;
+  let id = idBase;
+  let n = 1;
+  while (ballsCatalog.some((b) => b.id === id)) {
+    id = `${idBase}-${n++}`;
+  }
+  return {
+    id,
+    name: "새 공",
+    imageDataUrl: `data:image/svg+xml;utf8,${svg}`,
+    tint: "#ffffff"
+  };
+}
+
+addBallBtn?.addEventListener("click", () => {
+  if (state.mode === "playing") return;
+  const next = [...ballsCatalog, makeNewBall()];
+  saveBallsCatalog(next);
+  setBalls(next);
+  settings.render?.();
+});
 
 function renderBallCards() {
   // Avoid innerHTML to reduce the chance of accidental XSS patterns.
@@ -110,9 +215,15 @@ function renderBallCards() {
     minus.type = "button";
     minus.textContent = "-";
 
-    const count = document.createElement("div");
+    const count = document.createElement("input");
     count.className = "ball-qty__count";
-    count.textContent = String(getBallCount(state, b.id));
+    count.type = "number";
+    count.inputMode = "numeric";
+    count.min = "0";
+    count.max = "99";
+    count.step = "1";
+    count.value = String(getBallCount(state, b.id));
+    count.setAttribute("aria-label", `${b.name} 개수`);
 
     const plus = document.createElement("button");
     plus.className = "btn btn--ghost ball-qty__btn";
@@ -124,15 +235,25 @@ function renderBallCards() {
       const next = getBallCount(state, b.id) + d;
       setBallCount(state, b.id, next);
       saveBallCounts(state.counts);
-      count.textContent = String(getBallCount(state, b.id));
+      count.value = String(getBallCount(state, b.id));
       updateControls();
     };
     minus.addEventListener("click", () => applyDelta(-1));
     plus.addEventListener("click", () => applyDelta(+1));
 
+    count.addEventListener("input", () => {
+      if (state.mode === "playing") return;
+      const next = Number(count.value);
+      setBallCount(state, b.id, next);
+      saveBallCounts(state.counts);
+      count.value = String(getBallCount(state, b.id));
+      updateControls();
+    });
+
     const disabled = state.mode === "playing";
     minus.disabled = disabled;
     plus.disabled = disabled;
+    count.disabled = disabled;
 
     qty.appendChild(minus);
     qty.appendChild(count);
@@ -148,34 +269,252 @@ renderBallCards();
 
 function updateControls() {
   const total = getTotalSelectedCount(state);
-  dropBtn.disabled = state.mode !== "playing" || state.released || state.pending.length === 0;
   startBtn.disabled = state.mode === "playing";
-  if (followBtn) {
+  if (viewLockEl) {
     const v = renderer.getViewState?.();
-    followBtn.disabled = !(state.mode === "playing" && v && typeof v.cameraOverrideY === "number");
+    viewLockEl.disabled = !(state.mode === "playing" && state.released && v);
+    viewLockEl.checked = !!tailFocusOn;
   }
   hintEl.textContent =
     state.mode === "playing"
       ? state.released
-        ? `Dropping... Finished: ${state.finished.length}/${state.totalToDrop}`
-        : `Click the board to set drop position. Press DROP to release all (${state.pending.length}).`
-      : `Select counts (+/-), then press Start. Total selected: ${total}`;
-
-  if (legendEl) legendEl.hidden = !state.chaos?.enabled;
-  if (chaosBtn) {
-    chaosBtn.textContent = `Chaos: ${state.chaos?.enabled ? "On" : "Off"}`;
-    chaosBtn.disabled = state.mode === "playing";
-  }
+        ? `진행 중... 완료: ${state.finished.length}/${state.totalToDrop}`
+        : `준비 중... (시작을 누르면 바로 떨어집니다)`
+      : `수량을 고른 뒤 시작하세요. 총 ${total}개`;
 }
 
 function setResultText(msg) {
   resultEl.textContent = msg || "";
 }
 
-startBtn.addEventListener("click", () => {
+function updateCanvasCoordReadout(xFrac, yFrac) {
+  if (!coordMode) return;
+  lastCanvasFrac =
+    Number.isFinite(xFrac) && Number.isFinite(yFrac) ? { xFrac: clamp01(xFrac), yFrac: clamp01(yFrac) } : null;
+  const show = pinnedCanvasFrac || lastCanvasFrac;
+  if (canvasCoordReadoutEl) {
+    if (!show) canvasCoordReadoutEl.textContent = "xFrac: -, yFrac: -";
+    else
+      canvasCoordReadoutEl.textContent = `xFrac: ${show.xFrac.toFixed(3)}, yFrac: ${show.yFrac.toFixed(3)}${pinnedCanvasFrac ? " (고정)" : ""}`;
+  }
+  if (canvasCoordCopyBtn) canvasCoordCopyBtn.disabled = !show;
+}
+
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
+async function copyText(s) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(s);
+      return true;
+    }
+  } catch {
+    // fall through
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = s;
+    ta.setAttribute("readonly", "true");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function playFanfare() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.055;
+    gain.connect(ctx.destination);
+
+    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+    const t0 = ctx.currentTime + 0.02;
+    for (let i = 0; i < notes.length; i++) {
+      const osc = ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = notes[i];
+      osc.connect(gain);
+      const t = t0 + i * 0.12;
+      osc.start(t);
+      osc.stop(t + 0.16);
+    }
+    setTimeout(() => ctx.close().catch(() => {}), 1200);
+  } catch {
+    // ignore
+  }
+}
+
+// Simple chiptune-ish BGM (original pattern; "8-bit vibe" without copying any specific tune).
+let bgm = {
+  on: false,
+  ctx: null,
+  gain: null,
+  timer: null,
+  loopSec: 0,
+  nextT: 0,
+};
+
+function midiToHz(n) {
+  return 440 * Math.pow(2, (n - 69) / 12);
+}
+
+function bgmStop() {
+  if (bgm.timer) {
+    clearInterval(bgm.timer);
+    bgm.timer = null;
+  }
+  bgm.nextT = 0;
+  if (bgm.gain) {
+    try { bgm.gain.gain.setValueAtTime(0.0, bgm.ctx.currentTime); } catch {}
+  }
+  if (bgm.ctx) {
+    bgm.ctx.close().catch(() => {});
+  }
+  bgm.ctx = null;
+  bgm.gain = null;
+  bgm.loopSec = 0;
+}
+
+function bgmStart() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+
+  bgmStop();
+  const ctx = new AC();
+  const gain = ctx.createGain();
+  gain.gain.value = 0.0;
+  gain.connect(ctx.destination);
+  bgm.ctx = ctx;
+  bgm.gain = gain;
+
+  // Fade in.
+  const t0 = ctx.currentTime + 0.02;
+  gain.gain.setValueAtTime(0.0, t0);
+  // 2x louder than before.
+  gain.gain.linearRampToValueAtTime(0.12, t0 + 0.25);
+
+  const bpm = 152;
+  const step = 60 / bpm / 2; // 8th note
+  const bars = 4;
+  const stepsPerBar = 8; // 8th notes
+  const totalSteps = bars * stepsPerBar;
+  bgm.loopSec = totalSteps * step;
+  bgm.nextT = t0;
+
+  const melody = [
+    76, 79, 83, 79, 76, 74, 71, 74,
+    76, 79, 83, 86, 83, 79, 76, 74,
+    71, 74, 76, 79, 83, 79, 76, 74,
+    71, 69, 71, 74, 76, 74, 71, 69,
+  ]; // E5.. (original-ish arpeggio line)
+  const bass = [
+    52, 52, 52, 52, 50, 50, 50, 50,
+    48, 48, 48, 48, 50, 50, 50, 50,
+    52, 52, 52, 52, 55, 55, 55, 55,
+    50, 50, 50, 50, 48, 48, 48, 48,
+  ];
+
+  function playTone(type, hz, start, dur, vol) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(hz, start);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), start + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    o.connect(g);
+    g.connect(gain);
+    o.start(start);
+    o.stop(start + dur + 0.02);
+  }
+
+  function schedule(fromT, horizonSec) {
+    const endT = fromT + horizonSec;
+    let t = bgm.nextT;
+    while (t < endT) {
+      const k = Math.floor((t - t0) / step);
+      const i = ((k % totalSteps) + totalSteps) % totalSteps;
+      const m = melody[i];
+      const b = bass[i];
+      playTone("square", midiToHz(m), t, step * 0.92, 0.080);
+      // Bass: triangle + a tiny sub pulse for punch.
+      playTone("triangle", midiToHz(b), t, step * 0.98, 0.068);
+      if (i % 2 === 0) playTone("square", midiToHz(b - 12), t, step * 0.30, 0.024);
+      t += step;
+    }
+    bgm.nextT = t;
+  }
+
+  // Schedule ahead in small chunks.
+  schedule(ctx.currentTime, 0.8);
+  bgm.timer = setInterval(() => {
+    if (!bgm.ctx) return;
+    const now = bgm.ctx.currentTime;
+    schedule(now, 0.9);
+  }, 320);
+}
+
+function setBgmOn(on) {
+  bgm.on = !!on;
+  try { localStorage.setItem("bgmOn", bgm.on ? "1" : "0"); } catch {}
+  if (bgmBtn) {
+    bgmBtn.setAttribute("aria-pressed", bgm.on ? "true" : "false");
+    bgmBtn.textContent = bgm.on ? "BGM 켬" : "BGM 끔";
+  }
+  if (bgm.on) bgmStart();
+  else bgmStop();
+}
+
+function getWinnerPayloadFromState() {
+  if (!state?.winner) return null;
+  const b = ballsCatalog.find((x) => x.id === state.winner?.ballId);
+  const name = b?.name || state.winner?.ballId || "알 수 없는 공";
+  return {
+    name,
+    img: b?.imageDataUrl || "",
+    order: "",
+    total: 0
+  };
+}
+
+function showWinnerModal() {
+  if (!winnerDialog) return;
+  const payload = lastWinner || getWinnerPayloadFromState();
+  if (!payload) return;
+
+  if (winnerImgEl) {
+    winnerImgEl.src = payload.img || "";
+    winnerImgEl.alt = payload.name;
+  }
+  if (winnerTitleEl) winnerTitleEl.textContent = "마지막 공이 도착했습니다";
+  if (winnerSubEl) winnerSubEl.textContent = "";
+  if (winnerNameEl) winnerNameEl.textContent = payload.name;
+  if (winnerOrderEl) winnerOrderEl.textContent = payload.order ? `${payload.order}${payload.total ? ` / ${payload.total}` : ""}` : "";
+
+  playFanfare();
+  try {
+    winnerDialog.showModal();
+  } catch {
+    // ignore
+  }
+}
+
+function tryStart() {
   if (getTotalSelectedCount(state) <= 0) {
-    setResultText("Select at least 1 ball.");
-    return;
+    setResultText("최소 1개 이상 선택하세요.");
+    return false;
   }
   // Make each run unpredictable to the user, but still deterministic within the run.
   // (The seed is exposed via render_game_to_text for debugging/fairness.)
@@ -183,24 +522,35 @@ startBtn.addEventListener("click", () => {
   state.rng = makeRng(state.seed);
   startGame(state);
   state._shownResultId = null;
+  state._shownWinnerT = null;
   setResultText("");
   renderBallCards(); // disable +/- while playing
   updateControls();
+  // Default to tail focus when a run starts.
+  tailFocusOn = true;
+  renderer.clearCameraOverride?.();
+  if (viewLockEl) viewLockEl.checked = true;
+  setWinnerCache(null);
+  // Start implies drop: release all marbles immediately.
+  const n = dropAll(state);
+  if (n) setResultText(`시작! ${n}개 투하`);
+  return true;
+}
+
+startBtn.addEventListener("click", () => {
+  tryStart();
 });
 
 resetBtn.addEventListener("click", () => {
   resetGame(state);
   state._shownResultId = null;
+  state._shownWinnerT = null;
   setResultText("");
   renderBallCards();
   renderer.clearCameraOverride?.();
-  updateControls();
-});
-
-chaosBtn?.addEventListener("click", () => {
-  if (state.mode === "playing") return;
-  state.chaos.enabled = !state.chaos.enabled;
-  saveChaosEnabled(state.chaos.enabled);
+  tailFocusOn = true;
+  if (viewLockEl) viewLockEl.checked = true;
+  setWinnerCache(null);
   updateControls();
 });
 
@@ -208,33 +558,40 @@ settingsBtn.addEventListener("click", () => {
   settings.open();
 });
 
-dropBtn.addEventListener("click", () => {
-  const n = dropAll(state);
-  if (!n) return;
-  setResultText(`Dropped: ${n} marbles`);
+bgmBtn?.addEventListener("click", async () => {
+  // Ensure this runs under a user gesture so AudioContext can start.
+  setBgmOn(!bgm.on);
 });
 
-function canvasPointerToWorld(e) {
-  const rect = canvas.getBoundingClientRect();
-  const sx = e.clientX - rect.left;
-  const sy = e.clientY - rect.top;
-  return renderer.screenToWorld(sx, sy);
-}
-
-canvas.addEventListener("pointerdown", (e) => {
-  if (state.mode !== "playing") return;
-  const p = canvasPointerToWorld(e);
-  setDropX(state, p.x);
+winnerBtn?.addEventListener("click", () => {
+  showWinnerModal();
 });
+
+// Drop position selection via clicking the board was removed (always uses the default spawn x).
 
 // Fullscreen toggle per skill guidance.
 document.addEventListener("keydown", async (e) => {
-  if (e.key.toLowerCase() !== "f") return;
-  try {
-    if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
-    else await document.exitFullscreen();
-  } catch {
-    // ignore
+  const tag = e.target?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+  const k = e.key?.toLowerCase?.() || "";
+
+  // Fullscreen.
+  if (k === "f") {
+    try {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  // Keyboard controls for automation/accessibility:
+  // - Enter: 시작(=투하)
+  if (e.key === "Enter" && state.mode !== "playing") {
+    if (tryStart()) e.preventDefault();
+    return;
   }
 });
 
@@ -247,15 +604,14 @@ function tickFixed(ms) {
 }
 
 function onAfterFrame() {
-  if (state.lastResult && !state._shownResultId) {
-    state._shownResultId = state.lastResult.marbleId;
-    const b = ballsCatalog.find((x) => x.id === state.lastResult.ballId);
-    setResultText(`Result: ${b?.name || state.lastResult.ballId} -> ${state.lastResult.label}`);
-  }
   if (state.winner && state._shownWinnerT !== state.winner.t) {
     state._shownWinnerT = state.winner.t;
-    const b = ballsCatalog.find((x) => x.id === state.winner.ballId);
-    setResultText(`Winner (last to arrive): ${b?.name || state.winner.ballId} -> ${state.winner.label}`);
+    const p = getWinnerPayloadFromState();
+    if (p) {
+      setWinnerCache(p);
+      setResultText(`마지막 도착: ${p.name} (${p.order}번째)`);
+    }
+    showWinnerModal();
   }
   updateControls();
 }
@@ -272,11 +628,26 @@ window.advanceTime = async (ms) => {
 };
 
 function resize() {
-  renderer.resizeToFit();
-  renderer.draw(state, ballsCatalog, imagesById);
+  // Deprecated: kept for any external callers.
+  scheduleResize();
 }
-window.addEventListener("resize", resize);
-resize();
+
+let _resizeRaf = 0;
+function scheduleResize() {
+  if (_resizeRaf) return;
+  _resizeRaf = requestAnimationFrame(() => {
+    _resizeRaf = 0;
+    syncVisualViewportHeight();
+    renderer.resizeToFit();
+    renderer.draw(state, ballsCatalog, imagesById);
+  });
+}
+
+window.addEventListener("resize", scheduleResize);
+window.visualViewport?.addEventListener("resize", scheduleResize);
+window.visualViewport?.addEventListener("scroll", scheduleResize);
+syncVisualViewportHeight();
+scheduleResize();
 
 // Animation loop for interactive play. `advanceTime()` overrides are for automation.
 let last = performance.now();
@@ -330,24 +701,6 @@ function drawMinimap() {
   minimapCtx.lineWidth = 2;
   minimapCtx.strokeRect(trackX + 1, trackY + trackH * y0, trackW - 2, Math.max(8, trackH * (y1 - y0)));
 
-  // Chaos markers (bumpers/portals) as tiny dots.
-  if (state.chaos?.enabled) {
-    for (const o of state.chaos.bumpers || []) {
-      const nx = o.x / worldW;
-      const ny = o.y / worldH;
-      minimapCtx.fillStyle = "rgba(255,176,0,0.75)";
-      minimapCtx.fillRect(trackX + trackW * nx - 1, trackY + trackH * ny - 1, 2, 2);
-    }
-    for (const p of state.chaos.portals || []) {
-      for (const end of [p.a, p.b]) {
-        const nx = end.x / worldW;
-        const ny = end.y / worldH;
-        minimapCtx.fillStyle = "rgba(202,160,255,0.85)";
-        minimapCtx.fillRect(trackX + trackW * nx - 1, trackY + trackH * ny - 1, 2, 2);
-      }
-    }
-  }
-
   // Zigzag propeller marker.
   if (board.layout === "zigzag" && board.zigzag?.propellers?.length) {
     for (const p of board.zigzag.propellers) {
@@ -373,9 +726,10 @@ function drawMinimap() {
 
   // Hint text (runtime state).
   if (minimapHintEl) {
-    if (state.mode !== "playing") minimapHintEl.textContent = "Start the game to enable navigation.";
-    else if (!state.released) minimapHintEl.textContent = "Click map to preview. DROP starts the run.";
-    else minimapHintEl.textContent = "Click map to jump. Follow resumes auto-tracking.";
+    if (state.mode !== "playing") minimapHintEl.textContent = "시작 전에도 미니맵으로 맵을 둘러볼 수 있어요.";
+    else
+      minimapHintEl.textContent =
+        "토글 OFF: 자유 시점(미니맵으로 이동). 토글 ON: 후미 공 자동 추적.";
   }
 }
 
@@ -385,8 +739,11 @@ function clamp(v, a, b) {
 
 if (minimap) {
   const onPick = (e) => {
-    if (state.mode !== "playing") return;
+    // Free view mode only. If the user interacts with the minimap, switch to free view.
+    tailFocusOn = false;
+    if (viewLockEl) viewLockEl.checked = false;
     const rect = minimap.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     const v = renderer.getViewState?.();
     const viewH = v?.viewHWorld ?? board.worldH;
@@ -401,10 +758,108 @@ if (minimap) {
   });
 }
 
-followBtn?.addEventListener("click", () => {
-  renderer.clearCameraOverride?.();
+canvas?.addEventListener("pointermove", (e) => {
+  if (!coordMode) return;
+  if (pinnedCanvasFrac) return;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const w = renderer.screenToWorld(sx, sy);
+  const xFrac = w.x / board.worldW;
+  const yFrac = w.y / board.worldH;
+  updateCanvasCoordReadout(xFrac, yFrac);
+});
+canvas?.addEventListener("pointerleave", () => {
+  if (!coordMode) return;
+  if (!pinnedCanvasFrac) updateCanvasCoordReadout(NaN, NaN);
+});
+
+canvas?.addEventListener("pointerdown", (e) => {
+  if (!coordMode) return;
+  // Pin coordinate on click.
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const w = renderer.screenToWorld(sx, sy);
+  pinnedCanvasFrac = { xFrac: clamp01(w.x / board.worldW), yFrac: clamp01(w.y / board.worldH) };
+  updateCanvasCoordReadout(pinnedCanvasFrac.xFrac, pinnedCanvasFrac.yFrac);
+});
+
+canvasCoordCopyBtn?.addEventListener("click", async () => {
+  if (!coordMode) return;
+  const v = pinnedCanvasFrac || lastCanvasFrac;
+  if (!v) return;
+  const txt = `{ xFrac: ${v.xFrac.toFixed(3)}, yFrac: ${v.yFrac.toFixed(3)} }`;
+  const ok = await copyText(txt);
+  if (canvasCoordCopyBtn) {
+    const prev = canvasCoordCopyBtn.textContent;
+    canvasCoordCopyBtn.textContent = ok ? "복사됨" : "실패";
+    setTimeout(() => {
+      if (canvasCoordCopyBtn) canvasCoordCopyBtn.textContent = prev;
+    }, 650);
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!coordMode) return;
+  pinnedCanvasFrac = null;
+  updateCanvasCoordReadout(NaN, NaN);
+});
+
+function setCoordMode(on) {
+  coordMode = !!on;
+  document.documentElement.classList.toggle("coord-mode", coordMode);
+  pinnedCanvasFrac = null;
+  lastCanvasFrac = null;
+  lastMinimapFrac = null;
+  // Refresh readouts if visible.
+  if (coordMode) {
+    updateCanvasCoordReadout(NaN, NaN);
+  }
+}
+
+// Secret toggle: click "미니맵" title 5 times in a row.
+if (minimapTitleEl) {
+  let clicks = 0;
+  let lastClickMs = 0;
+  minimapTitleEl.addEventListener("click", () => {
+    const now = Date.now();
+    if (now - lastClickMs > 900) clicks = 0;
+    lastClickMs = now;
+    clicks++;
+    if (clicks >= 5) {
+      clicks = 0;
+      setCoordMode(!coordMode);
+    }
+  });
+}
+
+// Default: hidden.
+setCoordMode(false);
+
+viewLockEl?.addEventListener("change", () => {
+  const v = renderer.getViewState?.();
+  if (!v) return;
+  tailFocusOn = !!viewLockEl.checked;
+  if (tailFocusOn) {
+    renderer.clearCameraOverride?.(); // auto tail focus
+  } else {
+    // Freeze at current view; user can scrub via minimap.
+    renderer.setCameraOverrideY?.(v.cameraY);
+  }
   updateControls();
 });
 
 // Draw minimap at a fixed cadence, independent of requestAnimationFrame variability.
 setInterval(drawMinimap, 100);
+
+// Init persisted BGM.
+try {
+  const v = localStorage.getItem("bgmOn");
+  setBgmOn(v === "1");
+} catch {
+  setBgmOn(false);
+}
