@@ -119,15 +119,21 @@ export function makeRenderer(canvas, { board }) {
     ctx.fill();
     ctx.stroke();
 
-    // Roulette-style map polylines (walls / dividers).
-    if (board.roulette?.entities?.length) {
+    const fixedEntities = board.roulette?.entities?.length
+      ? board.roulette.entities
+      : board.zigzag?.entities?.length
+        ? board.zigzag.entities
+        : null;
+
+    // Fixed map polylines (walls / dividers).
+    if (fixedEntities) {
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.55)";
       ctx.lineWidth = 6;
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
       ctx.setLineDash([12, 10]);
-      for (const e of board.roulette.entities) {
+      for (const e of fixedEntities) {
         if (e.type === "polyline" && Array.isArray(e.points) && e.points.length >= 2) {
           const y0e = e.points[0][1];
           const y1e = e.points[e.points.length - 1][1];
@@ -147,7 +153,7 @@ export function makeRenderer(canvas, { board }) {
       ctx.save();
       ctx.strokeStyle = "rgba(0, 255, 255, 0.70)";
       ctx.lineWidth = 4;
-      for (const e of board.roulette.entities) {
+      for (const e of fixedEntities) {
         if (e.type !== "box") continue;
         if (e.y < view.cameraY - 240 || e.y > view.cameraY + view.viewHWorld + 240) continue;
         ctx.save();
@@ -155,6 +161,33 @@ export function makeRenderer(canvas, { board }) {
         ctx.rotate(e.rot || 0);
         ctx.strokeRect(-e.w / 2, -e.h / 2, e.w, e.h);
         ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    // Zigzag propellers.
+    if (board.zigzag?.propellers?.length) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 176, 0, 0.85)";
+      ctx.lineWidth = 8;
+      ctx.lineCap = "round";
+      for (const p of board.zigzag.propellers) {
+        if (p.y < view.cameraY - 260 || p.y > view.cameraY + view.viewHWorld + 260) continue;
+        const ang = (p.phase || 0) + (p.omega || 0) * state.t;
+        const c = Math.cos(ang);
+        const s = Math.sin(ang);
+        const hx = (p.len / 2) * c;
+        const hy = (p.len / 2) * s;
+        ctx.beginPath();
+        ctx.moveTo(p.x - hx, p.y - hy);
+        ctx.lineTo(p.x + hx, p.y + hy);
+        ctx.stroke();
+
+        // Hub.
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+        ctx.fill();
       }
       ctx.restore();
     }

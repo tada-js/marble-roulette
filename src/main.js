@@ -34,13 +34,14 @@ const settingsDialog = document.getElementById("settings-dialog");
 const settingsList = document.getElementById("settings-list");
 const restoreDefaultsBtn = document.getElementById("restore-defaults");
 
-const board = makeBoard({ layout: "roulette", heightMultiplier: 10, elementScale: 0.85 });
+const board = makeBoard({ layout: "zigzag", heightMultiplier: 10, elementScale: 0.85 });
 let ballsCatalog = loadBallsCatalog();
 saveBallsCatalog(ballsCatalog);
 
 const state = makeGameState({ seed: 1337, board, ballsCatalog });
 state.counts = loadBallCounts(ballsCatalog);
-state.chaos.enabled = loadChaosEnabled();
+// Zigzag map includes its own deterministic mixing (propeller). Keep chaos optional but off by default.
+state.chaos.enabled = board.layout === "zigzag" ? false : loadChaosEnabled();
 const renderer = makeRenderer(canvas, { board });
 const minimapCtx = minimap?.getContext?.("2d");
 
@@ -160,7 +161,10 @@ function updateControls() {
       : `Select counts (+/-), then press Start. Total selected: ${total}`;
 
   if (legendEl) legendEl.hidden = !state.chaos?.enabled;
-  if (chaosBtn) chaosBtn.textContent = `Chaos: ${state.chaos?.enabled ? "On" : "Off"}`;
+  if (chaosBtn) {
+    chaosBtn.textContent = `Chaos: ${state.chaos?.enabled ? "On" : "Off"}`;
+    chaosBtn.disabled = state.mode === "playing";
+  }
 }
 
 function setResultText(msg) {
@@ -340,6 +344,16 @@ function drawMinimap() {
         minimapCtx.fillStyle = "rgba(202,160,255,0.85)";
         minimapCtx.fillRect(trackX + trackW * nx - 1, trackY + trackH * ny - 1, 2, 2);
       }
+    }
+  }
+
+  // Zigzag propeller marker.
+  if (board.layout === "zigzag" && board.zigzag?.propellers?.length) {
+    for (const p of board.zigzag.propellers) {
+      const nx = p.x / worldW;
+      const ny = p.y / worldH;
+      minimapCtx.fillStyle = "rgba(255,176,0,0.95)";
+      minimapCtx.fillRect(trackX + trackW * nx - 2, trackY + trackH * ny - 2, 4, 4);
     }
   }
 
