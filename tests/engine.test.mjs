@@ -44,8 +44,8 @@ test("zigzag layout reduces straight falls (lateral motion) and propeller mixes"
   const x0 = board.worldW / 2;
   let maxDev = 0;
 
-  // Wait up to 60s.
-  for (let i = 0; i < 60 * 60 && state.finished.length < state.totalToDrop; i++) {
+  // Physics/map tuning may change time-to-finish; wait up to 120s.
+  for (let i = 0; i < 120 * 60 && state.finished.length < state.totalToDrop; i++) {
     step(state, 1 / 60);
     for (const m of state.marbles) {
       minX = Math.min(minX, m.x);

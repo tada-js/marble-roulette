@@ -965,20 +965,23 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18 }) {
   // Zigzag keys: frequent, fixed left-right alternation to avoid long straight drops.
   // Then a wide mixing chamber with a rotating propeller, then more zigzag to the bottom.
   const keys = [
-    k(0.00, 0.50, narrowHalfA),
-    k(0.06, 0.30, narrowHalfA),
-    k(0.12, 0.70, narrowHalfA),
-    k(0.18, 0.34, narrowHalfA),
-    k(0.24, 0.66, narrowHalfA),
-    k(0.30, 0.28, narrowHalfA),
-    k(0.36, 0.72, narrowHalfA),
-    k(0.44, 0.32, narrowHalfA),
-    k(0.52, 0.68, narrowHalfA),
+    // Wide, fair start corridor (no forced left/right bias at spawn).
+    k(0.00, 0.50, wideHalf),
+    k(0.08, 0.50, wideHalf),
+    k(0.14, 0.50, narrowHalfA),
+
+    // Start zigzag after the initial straight.
+    k(0.20, 0.30, narrowHalfA),
+    k(0.26, 0.70, narrowHalfA),
+    k(0.32, 0.28, narrowHalfA),
+    k(0.38, 0.72, narrowHalfA),
+    k(0.46, 0.32, narrowHalfA),
+    k(0.54, 0.68, narrowHalfA),
 
     // Mixing chamber (wide).
-    k(0.58, 0.52, wideHalf),
-    k(0.66, 0.48, wideHalf),
-    k(0.74, 0.52, wideHalf),
+    k(0.60, 0.52, wideHalf),
+    k(0.68, 0.48, wideHalf),
+    k(0.76, 0.52, wideHalf),
 
     // Back to narrow zigzag.
     k(0.80, 0.60, narrowHalfB),
@@ -1017,8 +1020,8 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18 }) {
   ];
 
   // Propeller in the mixing chamber.
-  const mixY0 = ky(0.58);
-  const mixY1 = ky(0.74);
+  const mixY0 = ky(0.60);
+  const mixY1 = ky(0.76);
   const mixY = (mixY0 + mixY1) / 2;
   const { cx, hw } = profileAt(mixY);
   // Leave some side clearance so marbles can bypass the blades.
