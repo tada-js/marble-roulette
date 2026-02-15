@@ -77,7 +77,8 @@ const settings = mountSettingsDialog(
 );
 
 function renderBallCards() {
-  ballsEl.innerHTML = "";
+  // Avoid innerHTML to reduce the chance of accidental XSS patterns.
+  ballsEl.replaceChildren();
   for (const b of ballsCatalog) {
     const card = document.createElement("div");
     card.className = "ball-card";

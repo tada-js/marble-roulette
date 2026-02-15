@@ -14,3 +14,8 @@ reviews:
         correctness + determinism (window.advanceTime / render_game_to_text),
         game physics stability, and CI reliability에 집중해줘.
         Prefer small, testable functions.
+        보안 체크도 필수로 해줘:
+        - 개인 정보(로컬 절대경로, 사용자명 등) 노출 금지
+        - 비밀정보(API 키/토큰/개인키 등) 커밋 금지
+        - XSS/DOM 인젝션 위험 패턴(예: untrusted innerHTML/insertAdjacentHTML 등) 지적
+        - 사용자 입력/업로드 데이터는 textContent/속성 할당 등 안전한 방식으로만 렌더링
