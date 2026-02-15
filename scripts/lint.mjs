@@ -1,0 +1,34 @@
+import { execFileSync } from "node:child_process";
+import { readdirSync, statSync } from "node:fs";
+import path from "node:path";
+
+const root = path.resolve(new URL("..", import.meta.url).pathname);
+const exts = new Set([".js", ".mjs"]);
+
+function walk(dir, out) {
+  for (const ent of readdirSync(dir)) {
+    if (ent === "node_modules" || ent === ".git" || ent === "output") continue;
+    const p = path.join(dir, ent);
+    const st = statSync(p);
+    if (st.isDirectory()) walk(p, out);
+    else if (exts.has(path.extname(p))) out.push(p);
+  }
+}
+
+const files = [];
+walk(root, files);
+
+let ok = true;
+for (const f of files) {
+  try {
+    execFileSync(process.execPath, ["--check", f], { stdio: "pipe" });
+  } catch (e) {
+    ok = false;
+    const msg = e?.stderr?.toString?.() || e?.message || String(e);
+    console.error(`[lint] node --check failed: ${f}\n${msg}`);
+  }
+}
+
+if (!ok) process.exit(1);
+console.log(`[lint] ok (${files.length} files)`);
+

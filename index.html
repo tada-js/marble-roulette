@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Marble Roulette</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand__title">Marble Roulette</div>
+          <div class="brand__subtitle">Pinball ladder with friendly animals</div>
+        </div>
+        <div class="topbar__actions">
+          <button id="settings-btn" class="btn btn--ghost" type="button">Settings</button>
+          <button id="reset-btn" class="btn btn--ghost" type="button">Reset</button>
+        </div>
+      </header>
+
+      <main class="stage">
+        <div class="hud">
+          <button id="start-btn" class="btn btn--primary" type="button">Start</button>
+          <button id="drop-btn" class="btn btn--accent" type="button" disabled>DROP</button>
+          <div class="hud__hint" id="hint">
+            Click the board to set drop position. Then press DROP.
+          </div>
+          <div class="balls" id="balls"></div>
+          <div class="result" id="result" aria-live="polite"></div>
+        </div>
+
+        <canvas id="game" width="900" height="1350"></canvas>
+      </main>
+    </div>
+
+    <dialog id="settings-dialog" class="dialog">
+      <form method="dialog" class="dialog__card" id="settings-form">
+        <div class="dialog__header">
+          <div class="dialog__title">Ball Settings</div>
+          <button class="btn btn--ghost" value="close" type="submit">Close</button>
+        </div>
+        <div class="dialog__body">
+          <div class="settings__list" id="settings-list"></div>
+          <div class="settings__actions">
+            <button id="restore-defaults" class="btn btn--ghost" type="button">Restore defaults</button>
+            <div class="settings__note">
+              Changes are saved in your browser (localStorage).
+            </div>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
+

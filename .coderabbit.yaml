@@ -1,0 +1,14 @@
+# CodeRabbit configuration (kept minimal; adjust once the GitHub App is installed).
+reviews:
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "marble-roulette/**"
+      instructions: |
+        Focus on correctness + determinism (window.advanceTime / render_game_to_text),
+        game physics stability, and CI reliability. Prefer small, testable functions.
+
