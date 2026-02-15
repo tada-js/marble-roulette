@@ -121,6 +121,7 @@ export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog =
     counts,
     chaos: {
       enabled: true,
+      fixed: true,
       rng: makeRng((seed ^ 0xa8f1d2c3) >>> 0),
       bumpers: [],
       spinners: [],
@@ -409,6 +410,20 @@ export function step(state, dt) {
       }
     }
 
+    // Unstuck: if a marble becomes nearly stationary for too long, give it a deterministic nudge.
+    for (const m of state.marbles) {
+      if (m.done) continue;
+      const sp = Math.hypot(m.vx, m.vy);
+      if (sp < 14) m._stuckMs = (m._stuckMs || 0) + dtSub * 1000;
+      else m._stuckMs = 0;
+      if (m._stuckMs > 1400) {
+        const dir = hash01(m.id) < 0.5 ? -1 : 1;
+        m.vx += dir * 120;
+        m.vy += 260;
+        m._stuckMs = 0;
+      }
+    }
+
     if (state.released && state.totalToDrop > 0 && state.finished.length === state.totalToDrop) {
       // Winner: the one who arrives last (max finish time). With simultaneous drop, this is also the last finish event.
       const last = state.finished.reduce((a, b) => (a.t >= b.t ? a : b));
@@ -574,7 +589,6 @@ function settleMarbles(state, iterations) {
 }
 
 function generateChaosObjects(state) {
-  const rnd = state.chaos.rng;
   const b = state.board;
   const corridor = b.corridor;
   const boundsAtY = (y) => {
@@ -586,6 +600,77 @@ function generateChaosObjects(state) {
     return { left: 0, right: b.worldW };
   };
 
+  // Fixed chaos layout (no randomness) to avoid jams.
+  if (state.chaos.fixed) {
+    const bumpers = [];
+    const spinners = [];
+    const portals = [];
+    const windZones = [];
+
+    const yStart = b.topPad + b.pegGapY * 6;
+    const yEnd = b.worldH - b.slotH - 320;
+    const ys = [lerp(yStart, yEnd, 0.18), lerp(yStart, yEnd, 0.42), lerp(yStart, yEnd, 0.68)];
+
+    const margin = b.ballR * 3.2;
+    const placeCircle = (y, r, prefFrac) => {
+      const { left, right } = boundsAtY(y);
+      const prefX = lerp(left + margin, right - margin, prefFrac);
+      return findSafePointForCircle(state, prefX, y, r, margin);
+    };
+
+    // 2 bumpers, 1 spinner, 1 portal pair, 1 wind band: enough variety without clogging.
+    {
+      const r = b.ballR * 1.15;
+      const p1 = placeCircle(ys[0], r, 0.35);
+      const p2 = placeCircle(ys[1], r, 0.65);
+      if (p1) bumpers.push({ kind: "bumper", x: p1.x, y: p1.y, r, strength: 520 });
+      if (p2) bumpers.push({ kind: "bumper", x: p2.x, y: p2.y, r, strength: 520 });
+    }
+
+    {
+      const r = b.ballR * 1.25;
+      const p = placeCircle(ys[1], r, 0.50);
+      if (p) spinners.push({ kind: "spinner", x: p.x, y: p.y, r, tangential: 360, dir: 1 });
+    }
+
+    {
+      const r = b.ballR * 1.35;
+      const a = placeCircle(ys[0], r, 0.62);
+      const bb = placeCircle(ys[2], r, 0.38);
+      if (a && bb) {
+        portals.push({
+          kind: "portal",
+          a: { x: a.x, y: a.y, r },
+          b: { x: bb.x, y: bb.y, r }
+        });
+      }
+    }
+
+    // Wind band around mid-late, full available width.
+    {
+      const y0 = lerp(yStart, yEnd, 0.78);
+      const y1 = y0 + b.pegGapY * 5.5;
+      const { left, right } = boundsAtY((y0 + y1) / 2);
+      windZones.push({
+        kind: "wind",
+        x0: left,
+        x1: right,
+        y0,
+        y1,
+        ax: 220,
+        freq: 0.95,
+        phase: 0
+      });
+    }
+
+    state.chaos.bumpers = bumpers;
+    state.chaos.spinners = spinners;
+    state.chaos.portals = portals;
+    state.chaos.windZones = windZones;
+    return;
+  }
+
+  const rnd = state.chaos.rng;
   const bumpers = [];
   const spinners = [];
   const portals = [];
@@ -692,9 +777,10 @@ function applyChaosCollisions(state, m, restitution) {
       m.vx -= (1 + restitution) * vn * nx;
       m.vy -= (1 + restitution) * vn * ny;
     }
-    const jitter = 0.8 + rnd() * 0.6;
+    const jitter = state.chaos.fixed ? 1 : 0.8 + rnd() * 0.6;
     m.vx += nx * o.strength * jitter;
-    m.vy += ny * o.strength * jitter;
+    // Bias down a bit so it doesn't "stick" upwards against walls.
+    m.vy = Math.max(m.vy + ny * o.strength * jitter, 40);
   }
 
   // Spinners: tangential impulse.
@@ -714,7 +800,7 @@ function applyChaosCollisions(state, m, restitution) {
     // Tangential direction (-ny, nx)
     const tx = -ny * o.dir;
     const ty = nx * o.dir;
-    const kick = o.tangential * (0.7 + rnd() * 0.6);
+    const kick = o.tangential * (state.chaos.fixed ? 1 : 0.7 + rnd() * 0.6);
     m.vx += tx * kick;
     m.vy += ty * kick;
   }
@@ -729,7 +815,7 @@ function applyChaosCollisions(state, m, restitution) {
     if (!hitA && !hitB) continue;
     const to = hitA ? p.b : p.a;
     // Place at destination with small offset.
-    const ang = rnd() * Math.PI * 2;
+    const ang = state.chaos.fixed ? (hash01(m.id) * Math.PI * 2) : rnd() * Math.PI * 2;
     const desiredX = to.x + Math.cos(ang) * (m.r + 4);
     m.y = clamp(to.y + Math.sin(ang) * (m.r + 4), m.r + 2, b.worldH - b.slotH - m.r - 2);
     if (b.layout === "roulette" && b.roulette?.spawnBoundsAtY) {
@@ -744,8 +830,13 @@ function applyChaosCollisions(state, m, restitution) {
       m.x = clamp(desiredX, m.r + 2, b.worldW - m.r - 2);
     }
     // Add velocity jitter so it doesn't feel scripted.
-    m.vx = (m.vx * 0.55) + (rnd() - 0.5) * 520;
-    m.vy = Math.max(0, m.vy * 0.35) + rnd() * 160;
+    if (state.chaos.fixed) {
+      m.vx = m.vx * 0.55 + (hash01(m.id + ":vx") - 0.5) * 180;
+      m.vy = Math.max(0, m.vy * 0.35) + hash01(m.id + ":vy") * 90;
+    } else {
+      m.vx = (m.vx * 0.55) + (rnd() - 0.5) * 520;
+      m.vy = Math.max(0, m.vy * 0.35) + rnd() * 160;
+    }
     m._portalCdT = state.t;
     break;
   }
@@ -1122,4 +1213,78 @@ function resolveCircleSegment(m, s, restitution) {
     m.vx -= vt * tx * 0.08;
     m.vy -= vt * ty * 0.08;
   }
+}
+
+function findSafePointForCircle(state, x, y, r, margin) {
+  const b = state.board;
+  const candidates = [
+    { x, y },
+    { x: x - r * 3.2, y },
+    { x: x + r * 3.2, y },
+    { x: x - r * 6.0, y },
+    { x: x + r * 6.0, y }
+  ];
+
+  for (const c of candidates) {
+    const p = clampPointToBounds(b, c.x, c.y, r + margin * 0.25);
+    if (!isCircleTooCloseToWalls(b, p.x, p.y, r, margin)) return p;
+  }
+  return null;
+}
+
+function clampPointToBounds(b, x, y, pad) {
+  if (b.layout === "roulette" && b.roulette?.spawnBoundsAtY) {
+    const bb = b.roulette.spawnBoundsAtY(y);
+    const left = Number(bb.left);
+    const right = Number(bb.right);
+    if (Number.isFinite(left) && Number.isFinite(right)) return { x: clamp(x, left + pad, right - pad), y };
+  }
+  if (b.corridor) {
+    const { left, right } = corridorAt(b.corridor, y);
+    return { x: clamp(x, left + pad, right - pad), y };
+  }
+  return { x: clamp(x, pad, b.worldW - pad), y };
+}
+
+function isCircleTooCloseToWalls(b, x, y, r, margin) {
+  const segs = b.wallSegments || [];
+  if (!segs.length) return false;
+  const pad = r + margin;
+  const candidates = [];
+  if (b.wallBins?.bins?.length) {
+    const h = b.wallBins.binH;
+    const i0 = clampInt(Math.floor((y - pad) / h), 0, b.wallBins.bins.length - 1);
+    const i1 = clampInt(Math.floor((y + pad) / h), 0, b.wallBins.bins.length - 1);
+    for (let i = i0; i <= i1; i++) for (const idx of b.wallBins.bins[i]) candidates.push(idx);
+  } else {
+    for (let i = 0; i < segs.length; i++) candidates.push(i);
+  }
+  const uniq = candidates.length > 64 ? new Set(candidates) : null;
+  const it = uniq ? uniq.values() : candidates;
+  for (const idx of it) {
+    const s = segs[idx];
+    if (y + pad < s.yMin || y - pad > s.yMax) continue;
+    const d2 = distPointToSeg2(x, y, s);
+    if (d2 < pad * pad) return true;
+  }
+  return false;
+}
+
+function distPointToSeg2(px, py, s) {
+  const t = clamp(((px - s.x0) * s.dx + (py - s.y0) * s.dy) / s.len2, 0, 1);
+  const cx = s.x0 + s.dx * t;
+  const cy = s.y0 + s.dy * t;
+  const dx = px - cx;
+  const dy = py - cy;
+  return dx * dx + dy * dy;
+}
+
+function hash01(str) {
+  // FNV-1a 32-bit -> [0,1)
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967296;
 }
