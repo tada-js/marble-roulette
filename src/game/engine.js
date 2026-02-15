@@ -251,10 +251,11 @@ export function step(state, dt) {
   if (state.mode !== "playing") return;
 
   // Heavier feel: lower gravity, lower bounciness, and more damping.
-  const g = 1050; // px/s^2 in world units
-  const restitution = 0.38;
-  const air = 0.988;
-  const maxV = 1700;
+  // Tuning goal: slower, heavier motion. We trade a bit of "pinball pop" for more weight.
+  const g = 900; // px/s^2 in world units
+  const restitution = 0.26;
+  const air = 0.982;
+  const maxV = 1350;
 
   const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY, corridor, wallSegments, wallBins, zigzag } =
     state.board;
