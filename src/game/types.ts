@@ -31,17 +31,23 @@ export interface Corridor {
   clearBands: CorridorBand[];
 }
 
+export interface SegmentBins {
+  binH: number;
+  bins: number[][];
+}
+
 export interface WallSegment {
   x0: number;
   y0: number;
   x1: number;
   y1: number;
   id?: string;
-  dx?: number;
-  dy?: number;
-  len2?: number;
-  yMin?: number;
-  yMax?: number;
+  // Precomputed fields for faster collision checks (filled by buildWallSegments).
+  dx: number;
+  dy: number;
+  len2: number;
+  yMin: number;
+  yMax: number;
 }
 
 export type FixedEntity =
@@ -114,7 +120,7 @@ export interface Board {
   roulette: RouletteLayout | null;
   zigzag: ZigzagLayout | null;
   wallSegments: WallSegment[];
-  wallBins: unknown;
+  wallBins: SegmentBins | null;
   slots: Slot[];
 }
 
@@ -191,6 +197,24 @@ export interface MakeBoardOptions {
   heightMultiplier?: number;
   elementScale?: number;
   corridorEnabled?: boolean;
-  customRotors?: Array<{ xFrac: number; yFrac: number; omega?: number }> | null;
+  customRotors?: CustomRotor[] | null;
   layout?: Layout;
 }
+
+export type CustomRotor = {
+  // Provide either world coordinates (x/y) or normalized fractions (xFrac/yFrac).
+  x?: number;
+  y?: number;
+  xFrac?: number;
+  yFrac?: number;
+
+  // Optional tuning knobs.
+  r?: number;
+  omega?: number;
+  maxSurf?: number;
+  bounce?: number;
+  kick?: number;
+  dampT?: number;
+  down?: number;
+  maxUp?: number;
+};

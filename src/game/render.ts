@@ -19,8 +19,9 @@ export interface Renderer {
 }
 
 export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Board }): Renderer {
-  const ctx = canvas.getContext("2d", { alpha: false });
-  if (!ctx) throw new Error("2D context not available");
+  const ctx0 = canvas.getContext("2d", { alpha: false });
+  if (!ctx0) throw new Error("2D context not available");
+  const ctx: CanvasRenderingContext2D = ctx0;
 
   const dpr = () => Math.max(1, Math.min(2, window.devicePixelRatio || 1));
   const bootMs = performance.now();
