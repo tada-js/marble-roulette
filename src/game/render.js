@@ -8,7 +8,8 @@ export function makeRenderer(canvas, { board }) {
     ox: 0,
     oy: 0,
     cameraY: 0,
-    viewHWorld: board.worldH
+    viewHWorld: board.worldH,
+    cameraOverrideY: null
   };
 
   function resizeToFit() {
@@ -82,9 +83,13 @@ export function makeRenderer(canvas, { board }) {
   function draw(state, ballsCatalog, imagesById) {
     drawBoardBase();
 
-    // Camera follows the slowest (smallest y) unfinished marble so the "last finisher" stays in view.
-    // Camera never moves upward to avoid disorienting jumps.
-    if (state.mode === "playing" && state.released) {
+    // Camera:
+    // - default: auto-follow the slowest (smallest y) unfinished marble so the "last finisher" stays in view.
+    // - manual: user clicks minimap -> cameraOverrideY.
+    // Camera never moves upward in auto mode to avoid disorienting jumps.
+    if (state.mode === "playing" && typeof view.cameraOverrideY === "number") {
+      view.cameraY = clamp(view.cameraOverrideY, 0, Math.max(0, board.worldH - view.viewHWorld));
+    } else if (state.mode === "playing" && state.released) {
       let targetY = 0;
       let found = false;
       for (const m of state.marbles) {
@@ -229,7 +234,19 @@ export function makeRenderer(canvas, { board }) {
     resizeToFit,
     draw,
     screenToWorld,
-    worldToScreen
+    worldToScreen,
+    getViewState: () => ({
+      scale: view.scale,
+      cameraY: view.cameraY,
+      viewHWorld: view.viewHWorld,
+      cameraOverrideY: view.cameraOverrideY
+    }),
+    setCameraOverrideY: (y) => {
+      view.cameraOverrideY = typeof y === "number" && Number.isFinite(y) ? y : null;
+    },
+    clearCameraOverride: () => {
+      view.cameraOverrideY = null;
+    }
   };
 }
 

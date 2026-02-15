@@ -23,6 +23,14 @@
         <div class="hud">
           <button id="start-btn" class="btn btn--primary" type="button">Start</button>
           <button id="drop-btn" class="btn btn--accent" type="button" disabled>DROP</button>
+          <div class="mini">
+            <div class="mini__row">
+              <div class="mini__title">Mini Map</div>
+              <button id="follow-btn" class="btn btn--ghost" type="button" disabled>Follow</button>
+            </div>
+            <canvas id="minimap" width="260" height="190"></canvas>
+            <div class="mini__hint" id="minimap-hint">Click map to jump. Follow resumes auto-tracking.</div>
+          </div>
           <div class="hud__hint" id="hint">
             Click the board to set drop position. Then press DROP.
           </div>
@@ -55,4 +63,3 @@
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
-
