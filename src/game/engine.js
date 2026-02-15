@@ -120,7 +120,7 @@ export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog =
     ballsCatalog,
     counts,
     chaos: {
-      enabled: board.layout !== "roulette",
+      enabled: true,
       rng: makeRng((seed ^ 0xa8f1d2c3) >>> 0),
       bumpers: [],
       spinners: [],
@@ -577,6 +577,14 @@ function generateChaosObjects(state) {
   const rnd = state.chaos.rng;
   const b = state.board;
   const corridor = b.corridor;
+  const boundsAtY = (y) => {
+    if (b.layout === "roulette" && b.roulette?.spawnBoundsAtY) {
+      const bb = b.roulette.spawnBoundsAtY(y);
+      return { left: Number(bb.left), right: Number(bb.right) };
+    }
+    if (corridor) return corridorAt(corridor, y);
+    return { left: 0, right: b.worldW };
+  };
 
   const bumpers = [];
   const spinners = [];
@@ -591,8 +599,8 @@ function generateChaosObjects(state) {
   for (let i = 0; i < bumperCount; i++) {
     const y = lerp(yStart, yEnd, (i + 1) / (bumperCount + 1)) + (rnd() - 0.5) * b.pegGapY * 2.5;
     if (corridor && isClearZone(corridor, y)) continue;
-    const { left, right } = corridor ? corridorAt(corridor, y) : { left: 0, right: b.worldW };
-    const x = lerp(left + b.sidePad * 0.2, right - b.sidePad * 0.2, rnd());
+    const { left, right } = boundsAtY(y);
+    const x = lerp(left + 40, right - 40, rnd());
     bumpers.push({
       kind: "bumper",
       x,
@@ -606,8 +614,8 @@ function generateChaosObjects(state) {
   for (let i = 0; i < spinnerCount; i++) {
     const y = lerp(yStart, yEnd, (i + 0.5) / spinnerCount) + (rnd() - 0.5) * b.pegGapY * 2.0;
     if (corridor && isClearZone(corridor, y)) continue;
-    const { left, right } = corridor ? corridorAt(corridor, y) : { left: 0, right: b.worldW };
-    const x = lerp(left + b.sidePad * 0.2, right - b.sidePad * 0.2, rnd());
+    const { left, right } = boundsAtY(y);
+    const x = lerp(left + 40, right - 40, rnd());
     spinners.push({
       kind: "spinner",
       x,
@@ -623,10 +631,10 @@ function generateChaosObjects(state) {
   const pyB = lerp(yStart, yEnd, 0.72);
   const yA = corridor && isClearZone(corridor, pyA) ? pyA - b.pegGapY * 4 : pyA;
   const yB = corridor && isClearZone(corridor, pyB) ? pyB + b.pegGapY * 4 : pyB;
-  const ca = corridor ? corridorAt(corridor, yA) : { left: 0, right: b.worldW };
-  const cb = corridor ? corridorAt(corridor, yB) : { left: 0, right: b.worldW };
-  const pxA = lerp(ca.left + b.sidePad * 0.2, ca.right - b.sidePad * 0.2, 0.22 + rnd() * 0.25);
-  const pxB = lerp(cb.left + b.sidePad * 0.2, cb.right - b.sidePad * 0.2, 0.55 + rnd() * 0.25);
+  const ca = boundsAtY(yA);
+  const cb = boundsAtY(yB);
+  const pxA = lerp(ca.left + 60, ca.right - 60, 0.22 + rnd() * 0.25);
+  const pxB = lerp(cb.left + 60, cb.right - 60, 0.55 + rnd() * 0.25);
   portals.push({
     kind: "portal",
     a: { x: pxA, y: yA, r: b.ballR * 1.6 },
@@ -640,7 +648,7 @@ function generateChaosObjects(state) {
     const y1 = y0 + b.pegGapY * (3.5 + rnd() * 3.5);
     // Avoid clear zones; user wants to add their own objects there.
     if (corridor && (isClearZone(corridor, y0) || isClearZone(corridor, y1))) continue;
-    const c0 = corridor ? corridorAt(corridor, (y0 + y1) / 2) : { left: 0, right: b.worldW };
+    const c0 = boundsAtY((y0 + y1) / 2);
     windZones.push({
       kind: "wind",
       x0: c0.left,
@@ -724,7 +732,12 @@ function applyChaosCollisions(state, m, restitution) {
     const ang = rnd() * Math.PI * 2;
     const desiredX = to.x + Math.cos(ang) * (m.r + 4);
     m.y = clamp(to.y + Math.sin(ang) * (m.r + 4), m.r + 2, b.worldH - b.slotH - m.r - 2);
-    if (b.corridor) {
+    if (b.layout === "roulette" && b.roulette?.spawnBoundsAtY) {
+      const bb = b.roulette.spawnBoundsAtY(m.y);
+      const left = Number(bb.left);
+      const right = Number(bb.right);
+      m.x = clamp(desiredX, left + m.r + 2, right - m.r - 2);
+    } else if (b.corridor) {
       const { left, right } = corridorAt(b.corridor, m.y);
       m.x = clamp(desiredX, left + m.r + 2, right - m.r - 2);
     } else {

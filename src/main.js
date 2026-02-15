@@ -13,12 +13,13 @@ import {
   setBallCount
 } from "./game/engine.js";
 import { makeRenderer } from "./game/render.js";
-import { loadBallsCatalog, loadBallCounts, saveBallsCatalog, saveBallCounts } from "./ui/storage.js";
+import { loadBallsCatalog, loadBallCounts, loadChaosEnabled, saveBallsCatalog, saveBallCounts, saveChaosEnabled } from "./ui/storage.js";
 import { mountSettingsDialog } from "./ui/settings.js";
 
 const canvas = document.getElementById("game");
 const startBtn = document.getElementById("start-btn");
 const dropBtn = document.getElementById("drop-btn");
+const chaosBtn = document.getElementById("chaos-btn");
 const resetBtn = document.getElementById("reset-btn");
 const settingsBtn = document.getElementById("settings-btn");
 const ballsEl = document.getElementById("balls");
@@ -39,6 +40,7 @@ saveBallsCatalog(ballsCatalog);
 
 const state = makeGameState({ seed: 1337, board, ballsCatalog });
 state.counts = loadBallCounts(ballsCatalog);
+state.chaos.enabled = loadChaosEnabled();
 const renderer = makeRenderer(canvas, { board });
 const minimapCtx = minimap?.getContext?.("2d");
 
@@ -158,6 +160,7 @@ function updateControls() {
       : `Select counts (+/-), then press Start. Total selected: ${total}`;
 
   if (legendEl) legendEl.hidden = !state.chaos?.enabled;
+  if (chaosBtn) chaosBtn.textContent = `Chaos: ${state.chaos?.enabled ? "On" : "Off"}`;
 }
 
 function setResultText(msg) {
@@ -186,6 +189,13 @@ resetBtn.addEventListener("click", () => {
   setResultText("");
   renderBallCards();
   renderer.clearCameraOverride?.();
+  updateControls();
+});
+
+chaosBtn?.addEventListener("click", () => {
+  if (state.mode === "playing") return;
+  state.chaos.enabled = !state.chaos.enabled;
+  saveChaosEnabled(state.chaos.enabled);
   updateControls();
 });
 
