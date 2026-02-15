@@ -226,6 +226,9 @@ export function dropAll(state) {
   state.marbles.push(...state.pending);
   const n = state.pending.length;
   state.pending = [];
+  // When many marbles spawn overlapping, they can get violently separated on the first frame.
+  // Pre-settle a bit against walls to keep them inside the playfield.
+  settleMarbles(state, 3);
   return n;
 }
 
@@ -488,22 +491,77 @@ function layoutPending(state) {
   const n = state.pending.length;
   if (!n) return;
   const gap = ballR * 2.2;
-  const perRow = Math.max(1, Math.floor((worldW - ballR * 2) / gap));
+  const baseY = 70;
+  const spawnBounds = (y) => {
+    if (state.board.layout === "roulette" && state.board.roulette?.spawnBoundsAtY) {
+      const b = state.board.roulette.spawnBoundsAtY(y);
+      const left = Number(b?.left);
+      const right = Number(b?.right);
+      if (Number.isFinite(left) && Number.isFinite(right) && right - left > ballR * 4) return { left, right };
+    }
+    return { left: ballR + 2, right: worldW - ballR - 2 };
+  };
+  const b0 = spawnBounds(baseY);
+  const usableW = Math.max(ballR * 4, (b0.right - b0.left) - ballR * 2);
+  const perRow = Math.max(1, Math.floor(usableW / gap));
   for (let i = 0; i < n; i++) {
     const row = Math.floor(i / perRow);
     const col = i % perRow;
     const colsInThisRow = Math.min(perRow, n - row * perRow);
-    const x0 = state.dropX - ((colsInThisRow - 1) * gap) / 2;
-    state.pending[i].y = 70 - row * (ballR * 1.9);
+    // Stack upward so a large count doesn't start inside the maze.
+    state.pending[i].y = baseY - row * (ballR * 1.9);
+    const b = spawnBounds(state.pending[i].y);
+    const center = clamp(state.dropX, b.left + ballR + 2, b.right - ballR - 2);
+    const x0 = center - ((colsInThisRow - 1) * gap) / 2;
     const desiredX = x0 + col * gap;
     if (state.board.layout === "roulette" && state.board.roulette?.spawnBoundsAtY) {
-      const { left, right } = state.board.roulette.spawnBoundsAtY(state.pending[i].y);
-      state.pending[i].x = clamp(desiredX, left + ballR + 2, right - ballR - 2);
+      state.pending[i].x = clamp(desiredX, b.left + ballR + 2, b.right - ballR - 2);
     } else if (state.board.corridor) {
       const { left, right } = corridorAt(state.board.corridor, state.pending[i].y);
       state.pending[i].x = clamp(desiredX, left + ballR + 2, right - ballR - 2);
     } else {
       state.pending[i].x = clamp(desiredX, ballR + 2, worldW - ballR - 2);
+    }
+  }
+}
+
+function settleMarbles(state, iterations) {
+  const { worldW, wallSegments, wallBins, corridor } = state.board;
+  const restitution = 0.25;
+  for (let it = 0; it < iterations; it++) {
+    // Walls first.
+    for (const m of state.marbles) {
+      if (m.done) continue;
+      if (wallSegments && wallSegments.length) {
+        resolveWallSegments(state.board, m, restitution, wallSegments, wallBins);
+      } else if (corridor) {
+        const { left, right } = corridorAt(corridor, m.y);
+        m.x = clamp(m.x, left + m.r, right - m.r);
+      } else {
+        m.x = clamp(m.x, m.r, worldW - m.r);
+      }
+    }
+    // Marble-marble separation.
+    for (let i = 0; i < state.marbles.length; i++) {
+      const a = state.marbles[i];
+      if (a.done) continue;
+      for (let j = i + 1; j < state.marbles.length; j++) {
+        const b = state.marbles[j];
+        if (b.done) continue;
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const rr = a.r + b.r;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= rr * rr || d2 === 0) continue;
+        const d = Math.sqrt(d2);
+        const nx = dx / d;
+        const ny = dy / d;
+        const push = (rr - d) * 0.5;
+        a.x += nx * push;
+        a.y += ny * push;
+        b.x -= nx * push;
+        b.y -= ny * push;
+      }
     }
   }
 }
