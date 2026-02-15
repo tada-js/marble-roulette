@@ -758,6 +758,36 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
     }
   ];
 
+  // A subset of static boxes from the reference stage.
+  const stageBoxes = [
+    // Small rotated "pins" near the top.
+    { x: 15.5, y: 30.0, w: 0.2, h: 0.2, rot: -45 },
+    { x: 15.5, y: 32.0, w: 0.2, h: 0.2, rot: -45 },
+    { x: 15.5, y: 28.0, w: 0.2, h: 0.2, rot: -45 },
+    { x: 12.5, y: 30.0, w: 0.2, h: 0.2, rot: -45 },
+    { x: 12.5, y: 32.0, w: 0.2, h: 0.2, rot: -45 },
+    { x: 12.5, y: 28.0, w: 0.2, h: 0.2, rot: -45 },
+
+    // Slash bands.
+    { x: 9.4, y: 66.6, w: 0.6, h: 0.1, rot: 45 },
+    { x: 11.3, y: 66.6, w: 0.6, h: 0.1, rot: 45 },
+    { x: 13.2, y: 66.6, w: 0.6, h: 0.1, rot: 45 },
+    { x: 15.1, y: 66.6, w: 0.6, h: 0.1, rot: 45 },
+    { x: 17.0, y: 66.6, w: 0.6, h: 0.1, rot: 45 },
+    { x: 18.9, y: 66.6, w: 0.6, h: 0.1, rot: 45 },
+    { x: 20.7, y: 66.6, w: 0.6, h: 0.1, rot: 45 },
+    { x: 22.7, y: 66.6, w: 0.6, h: 0.1, rot: 45 },
+
+    { x: 9.4, y: 69.1, w: 0.6, h: 0.1, rot: -45 },
+    { x: 11.3, y: 69.1, w: 0.6, h: 0.1, rot: -45 },
+    { x: 13.2, y: 69.1, w: 0.6, h: 0.1, rot: -45 },
+    { x: 15.1, y: 69.1, w: 0.6, h: 0.1, rot: -45 },
+    { x: 17.0, y: 69.1, w: 0.6, h: 0.1, rot: -45 },
+    { x: 18.9, y: 69.1, w: 0.6, h: 0.1, rot: -45 },
+    { x: 20.7, y: 69.1, w: 0.6, h: 0.1, rot: -45 },
+    { x: 22.7, y: 69.1, w: 0.6, h: 0.1, rot: -45 }
+  ];
+
   const yOff = 300;
   let xMin = Infinity;
   let xMax = -Infinity;
@@ -779,6 +809,7 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
   const usableH = Math.max(400, worldH - slotH - padY * 2);
   const sx = usableW / Math.max(1e-6, xMax - xMin);
   const sy = usableH / Math.max(1e-6, yMax - yMin);
+  const s = Math.min(sx, sy);
 
   const polylines = stagePolylines.map((pl) => ({
     id: pl.id,
@@ -789,8 +820,18 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
   const outerLeft = polylines.find((p) => p.id === "outer-left")?.points || [];
   const outerRight = polylines.find((p) => p.id === "outer-right")?.points || [];
 
+  const boxes = stageBoxes.map((b) => ({
+    id: `box_${b.x}_${b.y}_${b.rot}`,
+    type: "box",
+    x: padX + (b.x - xMin) * sx,
+    y: padY + (b.y + yOff - yMin) * sy,
+    w: b.w * s,
+    h: b.h * s,
+    rot: normalizeRotation(b.rot)
+  }));
+
   return {
-    entities: polylines,
+    entities: [...polylines, ...boxes],
     spawnBoundsAtY: (y) => {
       // Clamp to the outer boundaries near the top. Both outer polylines are monotonic in y.
       const left = interpolateXAtY(outerLeft, y);
@@ -798,6 +839,13 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
       return { left: Math.min(left, right), right: Math.max(left, right) };
     }
   };
+}
+
+function normalizeRotation(rot) {
+  const r = Number(rot) || 0;
+  // Heuristic: values with magnitude > 2*pi are degrees.
+  if (Math.abs(r) > Math.PI * 2) return (r * Math.PI) / 180;
+  return r;
 }
 
 function interpolateXAtY(points, y) {
@@ -818,13 +866,40 @@ function interpolateXAtY(points, y) {
 function buildWallSegments(entities) {
   const segs = [];
   for (const ent of entities || []) {
-    if (!ent || ent.type !== "polyline" || !Array.isArray(ent.points)) continue;
-    const pts = ent.points;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const [x0, y0] = pts[i];
-      const [x1, y1] = pts[i + 1];
-      segs.push(makeSeg(x0, y0, x1, y1));
+    if (!ent) continue;
+    if (ent.type === "polyline" && Array.isArray(ent.points)) {
+      const pts = ent.points;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [x0, y0] = pts[i];
+        const [x1, y1] = pts[i + 1];
+        segs.push(makeSeg(x0, y0, x1, y1));
+      }
+    } else if (ent.type === "box") {
+      const edges = boxToSegments(ent);
+      for (const e of edges) segs.push(e);
     }
+  }
+  return segs;
+}
+
+function boxToSegments(b) {
+  const cx = b.x;
+  const cy = b.y;
+  const hw = b.w / 2;
+  const hh = b.h / 2;
+  const c = Math.cos(b.rot || 0);
+  const s = Math.sin(b.rot || 0);
+  const pts = [
+    [-hw, -hh],
+    [hw, -hh],
+    [hw, hh],
+    [-hw, hh]
+  ].map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
+  const segs = [];
+  for (let i = 0; i < 4; i++) {
+    const a = pts[i];
+    const d = pts[(i + 1) % 4];
+    segs.push(makeSeg(a[0], a[1], d[0], d[1]));
   }
   return segs;
 }

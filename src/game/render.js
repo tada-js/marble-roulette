@@ -128,19 +128,34 @@ export function makeRenderer(canvas, { board }) {
       ctx.lineCap = "round";
       ctx.setLineDash([12, 10]);
       for (const e of board.roulette.entities) {
-        if (e.type !== "polyline" || !Array.isArray(e.points) || e.points.length < 2) continue;
-        const y0e = e.points[0][1];
-        const y1e = e.points[e.points.length - 1][1];
-        // Basic cull (outer walls span everything anyway).
-        if (Math.max(y0e, y1e) < view.cameraY - 200 || Math.min(y0e, y1e) > view.cameraY + view.viewHWorld + 200) {
-          continue;
+        if (e.type === "polyline" && Array.isArray(e.points) && e.points.length >= 2) {
+          const y0e = e.points[0][1];
+          const y1e = e.points[e.points.length - 1][1];
+          if (Math.max(y0e, y1e) < view.cameraY - 200 || Math.min(y0e, y1e) > view.cameraY + view.viewHWorld + 200) {
+            continue;
+          }
+          ctx.beginPath();
+          ctx.moveTo(e.points[0][0], e.points[0][1]);
+          for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
+          ctx.stroke();
         }
-        ctx.beginPath();
-        ctx.moveTo(e.points[0][0], e.points[0][1]);
-        for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
-        ctx.stroke();
       }
       ctx.setLineDash([]);
+      ctx.restore();
+
+      // Static boxes (cyan obstacles) like the reference.
+      ctx.save();
+      ctx.strokeStyle = "rgba(0, 255, 255, 0.70)";
+      ctx.lineWidth = 4;
+      for (const e of board.roulette.entities) {
+        if (e.type !== "box") continue;
+        if (e.y < view.cameraY - 240 || e.y > view.cameraY + view.viewHWorld + 240) continue;
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.rotate(e.rot || 0);
+        ctx.strokeRect(-e.w / 2, -e.h / 2, e.w, e.h);
+        ctx.restore();
+      }
       ctx.restore();
     }
 
