@@ -23,7 +23,8 @@ export function makeBoard({
   slotCount = 8,
   slotH = 130,
   heightMultiplier = 1,
-  elementScale = 1
+  elementScale = 1,
+  corridorEnabled = true
 } = {}) {
   const baseH = worldH;
   const baseRows = rows;
@@ -34,6 +35,8 @@ export function makeBoard({
   rows = Math.max(6, baseRows * mul);
   pegR = pegR * es;
   ballR = ballR * es;
+
+  const corridor = corridorEnabled ? makeCorridor({ worldW, worldH, ballR }) : null;
 
   const pegGapX = (worldW - sidePad * 2) / (cols - 1);
   const pegGapY = (worldH - topPad - slotH - 120) / (rows - 1);
@@ -46,6 +49,11 @@ export function makeBoard({
     const rowPegs = [];
     for (let c = 0; c < count; c++) {
       const x = sidePad + c * pegGapX + offset;
+      if (corridor) {
+        if (isClearZone(corridor, y)) continue;
+        const { left, right } = corridorAt(corridor, y);
+        if (x - pegR < left + 6 || x + pegR > right - 6) continue;
+      }
       const peg = { x, y, r: pegR };
       pegs.push(peg);
       rowPegs.push(peg);
@@ -80,6 +88,7 @@ export function makeBoard({
     pegRows,
     pegGapX,
     pegGapY,
+    corridor,
     slots
   };
 }
@@ -149,7 +158,12 @@ export function prepareDropQueue(state, { shuffle = true } = {}) {
 
 export function setDropX(state, x) {
   const pad = state.board.ballR + 2;
-  state.dropX = clamp(x, pad, state.board.worldW - pad);
+  if (state.board.corridor) {
+    const { left, right } = corridorAt(state.board.corridor, 80);
+    state.dropX = clamp(x, left + pad, right - pad);
+  } else {
+    state.dropX = clamp(x, pad, state.board.worldW - pad);
+  }
   if (state.mode === "playing" && !state.released) layoutPending(state);
 }
 
@@ -207,7 +221,7 @@ export function step(state, dt) {
   const air = 0.988;
   const maxV = 1700;
 
-  const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY } = state.board;
+  const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY, corridor } = state.board;
   const finishY = worldH - slotH;
 
   for (const m of state.marbles) {
@@ -235,13 +249,24 @@ export function step(state, dt) {
     m.x += m.vx * dt;
     m.y += m.vy * dt;
 
-    // Walls.
-    if (m.x - m.r < 0) {
-      m.x = m.r;
-      m.vx = Math.abs(m.vx) * restitution;
-    } else if (m.x + m.r > worldW) {
-      m.x = worldW - m.r;
-      m.vx = -Math.abs(m.vx) * restitution;
+    // Walls (optionally variable-width corridor).
+    if (corridor) {
+      const { left, right } = corridorAt(corridor, m.y);
+      if (m.x - m.r < left) {
+        m.x = left + m.r;
+        m.vx = Math.abs(m.vx) * restitution;
+      } else if (m.x + m.r > right) {
+        m.x = right - m.r;
+        m.vx = -Math.abs(m.vx) * restitution;
+      }
+    } else {
+      if (m.x - m.r < 0) {
+        m.x = m.r;
+        m.vx = Math.abs(m.vx) * restitution;
+      } else if (m.x + m.r > worldW) {
+        m.x = worldW - m.r;
+        m.vx = -Math.abs(m.vx) * restitution;
+      }
     }
 
     // Peg collisions (fixed pegs). Only check nearby rows for perf on tall boards.
@@ -356,7 +381,8 @@ export function snapshotForText(state) {
       worldW: b.worldW,
       worldH: b.worldH,
       pegCount: b.pegs.length,
-      slotCount: b.slotCount
+      slotCount: b.slotCount,
+      hasCorridor: !!b.corridor
     },
     marbles: state.marbles.map((m) => ({
       id: m.id,
@@ -410,7 +436,13 @@ function layoutPending(state) {
     const col = i % perRow;
     const colsInThisRow = Math.min(perRow, n - row * perRow);
     const x0 = state.dropX - ((colsInThisRow - 1) * gap) / 2;
-    state.pending[i].x = clamp(x0 + col * gap, ballR + 2, worldW - ballR - 2);
+    const desiredX = x0 + col * gap;
+    if (state.board.corridor) {
+      const { left, right } = corridorAt(state.board.corridor, state.pending[i].y);
+      state.pending[i].x = clamp(desiredX, left + ballR + 2, right - ballR - 2);
+    } else {
+      state.pending[i].x = clamp(desiredX, ballR + 2, worldW - ballR - 2);
+    }
     state.pending[i].y = 70 - row * (ballR * 1.9);
   }
 }
@@ -418,6 +450,7 @@ function layoutPending(state) {
 function generateChaosObjects(state) {
   const rnd = state.chaos.rng;
   const b = state.board;
+  const corridor = b.corridor;
 
   const bumpers = [];
   const spinners = [];
@@ -431,7 +464,9 @@ function generateChaosObjects(state) {
   const bumperCount = Math.max(8, Math.round((b.rows / 16) * 12));
   for (let i = 0; i < bumperCount; i++) {
     const y = lerp(yStart, yEnd, (i + 1) / (bumperCount + 1)) + (rnd() - 0.5) * b.pegGapY * 2.5;
-    const x = lerp(b.sidePad, b.worldW - b.sidePad, rnd());
+    if (corridor && isClearZone(corridor, y)) continue;
+    const { left, right } = corridor ? corridorAt(corridor, y) : { left: 0, right: b.worldW };
+    const x = lerp(left + b.sidePad * 0.2, right - b.sidePad * 0.2, rnd());
     bumpers.push({
       kind: "bumper",
       x,
@@ -444,7 +479,9 @@ function generateChaosObjects(state) {
   const spinnerCount = Math.max(6, Math.round((b.rows / 16) * 10));
   for (let i = 0; i < spinnerCount; i++) {
     const y = lerp(yStart, yEnd, (i + 0.5) / spinnerCount) + (rnd() - 0.5) * b.pegGapY * 2.0;
-    const x = lerp(b.sidePad, b.worldW - b.sidePad, rnd());
+    if (corridor && isClearZone(corridor, y)) continue;
+    const { left, right } = corridor ? corridorAt(corridor, y) : { left: 0, right: b.worldW };
+    const x = lerp(left + b.sidePad * 0.2, right - b.sidePad * 0.2, rnd());
     spinners.push({
       kind: "spinner",
       x,
@@ -458,12 +495,16 @@ function generateChaosObjects(state) {
   // One portal pair, mid-ish and low-ish.
   const pyA = lerp(yStart, yEnd, 0.35);
   const pyB = lerp(yStart, yEnd, 0.72);
-  const pxA = lerp(b.sidePad, b.worldW - b.sidePad, 0.22 + rnd() * 0.25);
-  const pxB = lerp(b.sidePad, b.worldW - b.sidePad, 0.55 + rnd() * 0.25);
+  const yA = corridor && isClearZone(corridor, pyA) ? pyA - b.pegGapY * 4 : pyA;
+  const yB = corridor && isClearZone(corridor, pyB) ? pyB + b.pegGapY * 4 : pyB;
+  const ca = corridor ? corridorAt(corridor, yA) : { left: 0, right: b.worldW };
+  const cb = corridor ? corridorAt(corridor, yB) : { left: 0, right: b.worldW };
+  const pxA = lerp(ca.left + b.sidePad * 0.2, ca.right - b.sidePad * 0.2, 0.22 + rnd() * 0.25);
+  const pxB = lerp(cb.left + b.sidePad * 0.2, cb.right - b.sidePad * 0.2, 0.55 + rnd() * 0.25);
   portals.push({
     kind: "portal",
-    a: { x: pxA, y: pyA, r: b.ballR * 1.6 },
-    b: { x: pxB, y: pyB, r: b.ballR * 1.6 }
+    a: { x: pxA, y: yA, r: b.ballR * 1.6 },
+    b: { x: pxB, y: yB, r: b.ballR * 1.6 }
   });
 
   // Wind bands.
@@ -471,10 +512,13 @@ function generateChaosObjects(state) {
   for (let i = 0; i < windCount; i++) {
     const y0 = lerp(yStart, yEnd, (i + 0.2) / windCount);
     const y1 = y0 + b.pegGapY * (3.5 + rnd() * 3.5);
+    // Avoid clear zones; user wants to add their own objects there.
+    if (corridor && (isClearZone(corridor, y0) || isClearZone(corridor, y1))) continue;
+    const c0 = corridor ? corridorAt(corridor, (y0 + y1) / 2) : { left: 0, right: b.worldW };
     windZones.push({
       kind: "wind",
-      x0: b.sidePad,
-      x1: b.worldW - b.sidePad,
+      x0: c0.left,
+      x1: c0.right,
       y0,
       y1,
       ax: 220 + rnd() * 420,
@@ -552,8 +596,14 @@ function applyChaosCollisions(state, m, restitution) {
     const to = hitA ? p.b : p.a;
     // Place at destination with small offset.
     const ang = rnd() * Math.PI * 2;
-    m.x = clamp(to.x + Math.cos(ang) * (m.r + 4), m.r + 2, b.worldW - m.r - 2);
+    const desiredX = to.x + Math.cos(ang) * (m.r + 4);
     m.y = clamp(to.y + Math.sin(ang) * (m.r + 4), m.r + 2, b.worldH - b.slotH - m.r - 2);
+    if (b.corridor) {
+      const { left, right } = corridorAt(b.corridor, m.y);
+      m.x = clamp(desiredX, left + m.r + 2, right - m.r - 2);
+    } else {
+      m.x = clamp(desiredX, m.r + 2, b.worldW - m.r - 2);
+    }
     // Add velocity jitter so it doesn't feel scripted.
     m.vx = (m.vx * 0.55) + (rnd() - 0.5) * 520;
     m.vy = Math.max(0, m.vy * 0.35) + rnd() * 160;
@@ -571,4 +621,78 @@ function circleHit(m, c) {
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+
+function makeCorridor({ worldW, worldH, ballR }) {
+  const segments = [];
+  const wideHalf = worldW / 2;
+  const narrowW = ballR * 7.2; // ~2-3 balls through, depending on scale.
+  const narrowHalf = Math.min(wideHalf, Math.max(narrowW / 2, ballR * 2.8));
+  const span = worldH - 220; // avoid very top
+  const n = 7;
+  const segH = span / n;
+  let y = 120;
+  for (let i = 0; i < n; i++) {
+    const y0 = y;
+    const y1 = y0 + segH;
+    const isNarrow = i % 2 === 1;
+    const halfWidth = isNarrow ? narrowHalf : wideHalf;
+    const centerX = worldW / 2 + (isNarrow ? (i % 4 === 1 ? -worldW * 0.12 : worldW * 0.12) : 0);
+    segments.push({
+      y0,
+      y1,
+      centerX,
+      halfWidth,
+      clear: isNarrow // remove objects in narrow zones
+    });
+    y = y1;
+  }
+  return { worldW, segments, transition: Math.max(120, ballR * 10) };
+}
+
+function isClearZone(corridor, y) {
+  const seg = corridor.segments.find((s) => y >= s.y0 && y < s.y1);
+  return !!seg?.clear;
+}
+
+function corridorAt(corridor, y) {
+  const segs = corridor.segments;
+  if (!segs.length) return { left: 0, right: 0 };
+  // find segment index
+  let i = 0;
+  for (; i < segs.length; i++) {
+    if (y < segs[i].y1) break;
+  }
+  i = clampInt(i, 0, segs.length - 1);
+  const a = segs[i];
+  const t = corridor.transition;
+  // blend with next segment near boundary
+  let cx = a.centerX;
+  let hw = a.halfWidth;
+  if (i + 1 < segs.length) {
+    const b = segs[i + 1];
+    const edge = a.y1;
+    if (y > edge - t) {
+      const u = smoothstep((y - (edge - t)) / t);
+      cx = lerp(a.centerX, b.centerX, u);
+      hw = lerp(a.halfWidth, b.halfWidth, u);
+    }
+  }
+  if (i > 0) {
+    const p = segs[i - 1];
+    const edge = a.y0;
+    if (y < edge + t) {
+      const u = smoothstep(1 - (y - edge) / t);
+      cx = lerp(a.centerX, p.centerX, u);
+      hw = lerp(a.halfWidth, p.halfWidth, u);
+    }
+  }
+  const left = clamp(cx - hw, 0, corridor.worldW);
+  const right = clamp(cx + hw, 0, corridor.worldW);
+  return { left: Math.min(left, right), right: Math.max(left, right) };
+}
+
+function smoothstep(x) {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
 }

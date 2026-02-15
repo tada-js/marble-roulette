@@ -119,6 +119,71 @@ export function makeRenderer(canvas, { board }) {
     ctx.fill();
     ctx.stroke();
 
+    // Variable-width corridor walls.
+    if (board.corridor) {
+      const y0v = clamp(view.cameraY - 60, 0, board.worldH);
+      const y1v = clamp(view.cameraY + view.viewHWorld + 60, 0, board.worldH);
+      const stepY = Math.max(30, board.pegGapY * 0.8);
+
+      // Shade "outside" area to make the corridor obvious.
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      ctx.beginPath();
+      // left outside
+      ctx.moveTo(0, y0v);
+      for (let y = y0v; y <= y1v; y += stepY) {
+        const { left } = corridorAt(board, y);
+        ctx.lineTo(left, y);
+      }
+      ctx.lineTo(corridorAt(board, y1v).left, y1v);
+      ctx.lineTo(0, y1v);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.beginPath();
+      // right outside
+      ctx.moveTo(board.worldW, y0v);
+      for (let y = y0v; y <= y1v; y += stepY) {
+        const { right } = corridorAt(board, y);
+        ctx.lineTo(right, y);
+      }
+      ctx.lineTo(corridorAt(board, y1v).right, y1v);
+      ctx.lineTo(board.worldW, y1v);
+      ctx.closePath();
+      ctx.fill();
+
+      // Wall strokes.
+      ctx.strokeStyle = "rgba(255,255,255,0.26)";
+      ctx.lineWidth = 6;
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      let first = true;
+      for (let y = y0v; y <= y1v; y += stepY) {
+        const { left } = corridorAt(board, y);
+        if (first) {
+          ctx.moveTo(left, y);
+          first = false;
+        } else {
+          ctx.lineTo(left, y);
+        }
+      }
+      ctx.lineTo(corridorAt(board, y1v).left, y1v);
+      ctx.stroke();
+
+      ctx.beginPath();
+      first = true;
+      for (let y = y0v; y <= y1v; y += stepY) {
+        const { right } = corridorAt(board, y);
+        if (first) {
+          ctx.moveTo(right, y);
+          first = false;
+        } else {
+          ctx.lineTo(right, y);
+        }
+      }
+      ctx.lineTo(corridorAt(board, y1v).right, y1v);
+      ctx.stroke();
+    }
+
     // Slot zone.
     const y0 = board.worldH - board.slotH;
     ctx.fillStyle = "rgba(255,255,255,0.03)";
@@ -383,4 +448,52 @@ function drawArrow(ctx, x, y, dir) {
   ctx.moveTo(x + (len / 2) * dir, y);
   ctx.lineTo(x + (len / 2) * dir - head * dir, y + head);
   ctx.stroke();
+}
+
+function corridorAt(board, y) {
+  const c = board.corridor;
+  if (!c) return { left: 0, right: board.worldW };
+  const segs = c.segments || [];
+  if (!segs.length) return { left: 0, right: board.worldW };
+
+  let i = 0;
+  for (; i < segs.length; i++) {
+    if (y < segs[i].y1) break;
+  }
+  i = clampInt(i, 0, segs.length - 1);
+  const a = segs[i];
+  const t = c.transition || 120;
+  let cx = a.centerX;
+  let hw = a.halfWidth;
+
+  if (i + 1 < segs.length) {
+    const b = segs[i + 1];
+    const edge = a.y1;
+    if (y > edge - t) {
+      const u = smoothstep((y - (edge - t)) / t);
+      cx = lerp(a.centerX, b.centerX, u);
+      hw = lerp(a.halfWidth, b.halfWidth, u);
+    }
+  }
+  if (i > 0) {
+    const p = segs[i - 1];
+    const edge = a.y0;
+    if (y < edge + t) {
+      const u = smoothstep(1 - (y - edge) / t);
+      cx = lerp(a.centerX, p.centerX, u);
+      hw = lerp(a.halfWidth, p.halfWidth, u);
+    }
+  }
+  const left = clamp(cx - hw, 0, board.worldW);
+  const right = clamp(cx + hw, 0, board.worldW);
+  return { left: Math.min(left, right), right: Math.max(left, right) };
+}
+
+function smoothstep(x) {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
 }

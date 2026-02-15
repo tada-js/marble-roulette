@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makeBoard, makeGameState, startGame, setDropX, dropAll, setBallCount, step } from "../src/game/engine.js";
 
 test("dropAll releases all marbles and winner is the last finisher", () => {
-  const board = makeBoard({ slotCount: 8, heightMultiplier: 1 });
+  const board = makeBoard({ slotCount: 8, heightMultiplier: 1, corridorEnabled: false });
   const ballsCatalog = [
     { id: "dog", name: "강아지", imageDataUrl: "data:image/svg+xml;utf8,<svg/>", tint: "#fff" }
   ];
