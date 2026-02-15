@@ -7,14 +7,17 @@ export function mountSettingsDialog(dialogEl, listEl, restoreBtn, getBalls, setB
     listEl.replaceChildren();
     for (const b of balls) {
       const row = document.createElement("div");
-      row.className = "settings-row";
+      row.className = "twItem";
 
       const thumb = document.createElement("div");
-      thumb.className = "settings-row__thumb";
+      thumb.className = "twItem__thumb";
       const img = document.createElement("img");
       img.alt = b.name;
       img.src = b.imageDataUrl;
       thumb.appendChild(img);
+
+      const main = document.createElement("div");
+      main.className = "twItem__main";
 
       const nameField = document.createElement("div");
       nameField.className = "field";
@@ -77,10 +80,19 @@ export function mountSettingsDialog(dialogEl, listEl, restoreBtn, getBalls, setB
       idBox.appendChild(idLabel);
       idBox.appendChild(idInput);
 
+      const grid = document.createElement("div");
+      grid.className = "twItem__grid";
+      grid.appendChild(nameField);
+      grid.appendChild(fileField);
+      grid.appendChild(idBox);
+
+      const actions = document.createElement("div");
+      actions.className = "twItem__actions";
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
-      removeBtn.className = "btn btn--danger settings-row__remove";
+      removeBtn.className = "btn btn--danger twItem__remove";
       removeBtn.textContent = "삭제";
+      // Keep at least one ball, and keep within the curated library ids where possible.
       removeBtn.disabled = balls.length <= 1;
       removeBtn.addEventListener("click", () => {
         if (balls.length <= 1) return;
@@ -89,12 +101,12 @@ export function mountSettingsDialog(dialogEl, listEl, restoreBtn, getBalls, setB
         setBalls(next);
         render();
       });
-      idBox.appendChild(removeBtn);
+      actions.appendChild(removeBtn);
 
       row.appendChild(thumb);
-      row.appendChild(nameField);
-      row.appendChild(fileField);
-      row.appendChild(idBox);
+      main.appendChild(grid);
+      main.appendChild(actions);
+      row.appendChild(main);
       listEl.appendChild(row);
     }
   }

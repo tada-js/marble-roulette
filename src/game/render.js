@@ -585,6 +585,36 @@ export function makeRenderer(canvas, { board }) {
       ctx.arc(0, 0, r + 2, 0, Math.PI * 2);
       ctx.fill();
 
+      // Name label above the ball (during play).
+      if (state.mode === "playing" && meta?.name) {
+        const txt = String(meta.name);
+        const fontSize = clamp(r * 0.72, 11, 16);
+        ctx.font = `900 ${fontSize}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        const padX = 10;
+        const padY = 6;
+        const tw = ctx.measureText(txt).width;
+        const w = Math.max(44, tw + padX * 2);
+        const h = fontSize + padY * 2;
+        const y = -r - h * 0.9;
+
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = "rgba(0,0,0,0.38)";
+        roundRect(ctx, -w / 2, y - h / 2, w, h, Math.min(12, h / 2));
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(255,255,255,0.22)";
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        ctx.fillText(txt, 0, y + 0.5);
+      }
+
       ctx.restore();
     }
 

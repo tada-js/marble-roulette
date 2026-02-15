@@ -18,6 +18,25 @@
 
 * { box-sizing: border-box; }
 
+/* Styled scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 255, 0.35) rgba(0, 0, 0, 0.20);
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.20);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid rgba(0,0,0,0.30);
+  background: linear-gradient(180deg, rgba(0,255,255,0.55), rgba(255,0,170,0.40));
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(0,255,255,0.70), rgba(255,176,0,0.55));
+}
+
 html, body {
   height: 100%;
   margin: 0;
@@ -46,11 +65,13 @@ html, body {
   border-bottom: 1px solid var(--stroke);
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
   backdrop-filter: blur(8px);
+  gap: 12px;
 }
 .topbar__actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .topbar__divider {
   width: 1px;
@@ -61,6 +82,29 @@ html, body {
 .topbar__start {
   padding-left: 14px;
   padding-right: 14px;
+  position: relative;
+  isolation: isolate;
+}
+.topbar__start::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 12px;
+  padding: 1px;
+  background: conic-gradient(
+    from 180deg,
+    rgba(255, 0, 170, 0.95),
+    rgba(0, 255, 255, 0.95),
+    rgba(255, 176, 0, 0.95),
+    rgba(255, 0, 170, 0.95)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  filter: hue-rotate(0deg);
+  animation: rgbBorder 6.5s linear infinite;
+  z-index: -1;
 }
 
 .brand__title {
@@ -85,6 +129,8 @@ html, body {
   border-right: 1px solid var(--stroke);
   background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
   overflow: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .board {
@@ -289,6 +335,7 @@ canvas#game {
   display: flex;
   gap: 10px;
   align-items: center;
+  min-width: 0;
 }
 .ball-thumb {
   width: 44px;
@@ -302,8 +349,8 @@ canvas#game {
 }
 .ball-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .ball-meta { min-width: 0; }
-.ball-name { font-weight: 800; line-height: 1.1; }
-.ball-id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ball-name { font-weight: 800; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ball-id { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .ball-qty {
   margin-left: auto;
@@ -692,11 +739,230 @@ dialog.dialog--winner::backdrop {
   .settings-row .field { grid-column: 2 / -1; }
 }
 
+@media (max-width: 720px) {
+  .topbar {
+    padding: 12px 12px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .brand__subtitle { display: none; }
+  .topbar__actions {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .topbar__divider { display: none; }
+  .btn {
+    padding: 9px 10px;
+    font-size: 13px;
+    border-radius: 12px;
+  }
+  .hud { padding: 12px; }
+  #minimap { height: 150px; }
+  .mini__hint { font-size: 11px; }
+}
+
+@media (max-width: 520px) {
+  .stage { grid-template-rows: auto 1fr; }
+  .ball-card { flex-wrap: wrap; }
+  .ball-qty {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .ball-qty__btn { width: 40px; height: 40px; }
+  .ball-qty__count[type="number"] { width: 72px; }
+  .twWinner { grid-template-columns: 1fr; }
+  .twWinner__thumb { width: 100%; height: auto; aspect-ratio: 1 / 1; }
+  .twWinner__v { white-space: normal; }
+}
+
 /* Settings dialog uses the same visual language as the winner modal. */
 dialog.dialog--settings::backdrop {
   background: rgba(0,0,0,0.58);
   backdrop-filter: blur(10px);
 }
-.winner__frame--settings {
-  width: min(860px, calc(100vw - 24px));
+
+/* Tailwind-ish modal structure */
+.twModal { border: none; padding: 0; background: transparent; }
+.twModal__card {
+  width: min(900px, calc(100vw - 24px));
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(6,10,22,0.97), rgba(4,8,18,0.94));
+  box-shadow: 0 42px 120px rgba(0,0,0,0.72);
+  border: 1px solid rgba(255,255,255,0.12);
+  position: relative;
+  overflow: hidden;
+}
+.twModal__card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  padding: 1px;
+  background: conic-gradient(
+    from 180deg,
+    rgba(255, 0, 170, 0.85),
+    rgba(0, 255, 255, 0.85),
+    rgba(255, 176, 0, 0.85),
+    rgba(255, 0, 170, 0.85)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  filter: hue-rotate(0deg);
+  animation: rgbBorder 6.5s linear infinite;
+}
+.twModal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 16px 12px;
+  /* Same background as the body: no mismatch */
+  background: transparent;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.twModal__headText { min-width: 0; }
+.twModal__title {
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.92);
+}
+.twModal__desc {
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.68);
+  line-height: 1.35;
+}
+.twModal__close {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.18);
+  color: rgba(255,255,255,0.85);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.twModal__close:hover { background: rgba(0,0,0,0.26); }
+.twModal__body {
+  padding: 14px 16px 8px;
+  background: transparent;
+}
+.twModal__footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 12px 16px 16px;
+  border-top: 1px solid rgba(255,255,255,0.10);
+  background: transparent;
+}
+
+.twWinner {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+.twWinner__thumb {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.16);
+  overflow: hidden;
+  box-shadow: 0 18px 65px rgba(0,0,0,0.42);
+}
+.twWinner__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.twWinner__copy {
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  padding: 12px 12px;
+  min-width: 0;
+}
+.twWinner__k {
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.72);
+}
+.twWinner__v {
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0.2px;
+  color: rgba(255,255,255,0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.twList {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  max-height: min(60vh, 560px);
+  overflow: auto;
+  padding-right: 4px;
+}
+.twItem {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+}
+.twItem__thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.18);
+}
+.twItem__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.twItem__main { min-width: 0; }
+.twItem__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.twItem__actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+.twItem__remove {
+  width: auto;
+  padding: 9px 12px;
+  border-radius: 12px;
+}
+
+.twModal .field label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.70);
+}
+.twModal .field input[type="text"] {
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.20);
+  color: rgba(255,255,255,0.92);
+}
+.twModal .field input[type="text"]:focus {
+  outline: none;
+  border-color: rgba(0,255,255,0.35);
+  box-shadow: 0 0 0 3px rgba(0,255,255,0.10);
+}
+
+@media (max-width: 980px) {
+  .twModal__footer { flex-wrap: wrap; justify-content: stretch; }
+  .twModal__footer .btn { flex: 1 1 auto; }
+  .twItem__grid { grid-template-columns: 1fr; }
 }

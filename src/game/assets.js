@@ -1,81 +1,62 @@
+function escapeXml(s) {
+  return String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function firstChar(s) {
+  // Properly handles Hangul/etc by iterating Unicode codepoints.
+  return Array.from(String(s || ""))[0] || "?";
+}
+
+function makeLetterBall({ id, name, c0, c1, tint }) {
+  const ch = escapeXml(firstChar(name));
+  const svg =
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="${c0}"/>
+            <stop offset="1" stop-color="${c1}"/>
+          </linearGradient>
+          <radialGradient id="v" cx="45%" cy="32%" r="78%">
+            <stop offset="0" stop-color="rgba(255,255,255,0.18)"/>
+            <stop offset="1" stop-color="rgba(0,0,0,0.62)"/>
+          </radialGradient>
+        </defs>
+        <rect width="128" height="128" rx="64" fill="url(#g)"/>
+        <rect width="128" height="128" rx="64" fill="url(#v)"/>
+        <text x="64" y="78"
+          text-anchor="middle"
+          font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+          font-size="68"
+          font-weight="950"
+          fill="rgba(255,255,255,0.96)"
+          style="paint-order: stroke; stroke: rgba(0,0,0,0.45); stroke-width: 10px; stroke-linejoin: round;"
+        >${ch}</text>
+      </svg>`
+    );
+  return { id, name, imageDataUrl: svg, tint: tint || c0 || "#ffffff" };
+}
+
 export const DEFAULT_BALLS = [
-  {
-    id: "dog",
-    name: "강아지",
-    // Simple inline SVG so the repo stays self-contained.
-    imageDataUrl:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-          <defs>
-            <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#ffd36b"/>
-              <stop offset="1" stop-color="#ff9f2e"/>
-            </linearGradient>
-          </defs>
-          <rect width="128" height="128" rx="64" fill="url(#g)"/>
-          <circle cx="64" cy="70" r="34" fill="#fff5e6" opacity="0.95"/>
-          <ellipse cx="40" cy="44" rx="14" ry="18" fill="#c9733d"/>
-          <ellipse cx="88" cy="44" rx="14" ry="18" fill="#c9733d"/>
-          <circle cx="52" cy="70" r="4" fill="#1b1b1b"/>
-          <circle cx="76" cy="70" r="4" fill="#1b1b1b"/>
-          <path d="M64 76c6 0 10 4 10 8s-4 10-10 10-10-6-10-10 4-8 10-8z" fill="#1b1b1b"/>
-          <path d="M54 92c6 6 14 6 20 0" fill="none" stroke="#c0562f" stroke-width="6" stroke-linecap="round"/>
-        </svg>`
-      ),
-    tint: "#ffb000"
-  },
-  {
-    id: "rabbit",
-    name: "토끼",
-    imageDataUrl:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-          <defs>
-            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#7df3d3"/>
-              <stop offset="1" stop-color="#2aa6ff"/>
-            </linearGradient>
-          </defs>
-          <rect width="128" height="128" rx="64" fill="url(#g)"/>
-          <ellipse cx="48" cy="36" rx="12" ry="30" fill="#f8fbff"/>
-          <ellipse cx="80" cy="36" rx="12" ry="30" fill="#f8fbff"/>
-          <ellipse cx="48" cy="40" rx="7" ry="20" fill="#ff98b5" opacity="0.85"/>
-          <ellipse cx="80" cy="40" rx="7" ry="20" fill="#ff98b5" opacity="0.85"/>
-          <circle cx="64" cy="74" r="34" fill="#f8fbff"/>
-          <circle cx="52" cy="72" r="4" fill="#1b1b1b"/>
-          <circle cx="76" cy="72" r="4" fill="#1b1b1b"/>
-          <path d="M64 76c6 0 10 4 10 8s-4 10-10 10-10-6-10-10 4-8 10-8z" fill="#ff4d6d"/>
-          <path d="M54 92c6 6 14 6 20 0" fill="none" stroke="#9aa8c4" stroke-width="6" stroke-linecap="round"/>
-        </svg>`
-      ),
-    tint: "#45f3c3"
-  },
-  {
-    id: "hamster",
-    name: "햄스터",
-    imageDataUrl:
-      "data:image/svg+xml;utf8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-          <defs>
-            <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0" stop-color="#ffe9b7"/>
-              <stop offset="1" stop-color="#caa0ff"/>
-            </linearGradient>
-          </defs>
-          <rect width="128" height="128" rx="64" fill="url(#g)"/>
-          <circle cx="64" cy="72" r="38" fill="#fff7ea"/>
-          <circle cx="38" cy="60" r="10" fill="#ffcf9f"/>
-          <circle cx="90" cy="60" r="10" fill="#ffcf9f"/>
-          <circle cx="52" cy="72" r="4" fill="#1b1b1b"/>
-          <circle cx="76" cy="72" r="4" fill="#1b1b1b"/>
-          <ellipse cx="64" cy="82" rx="8" ry="6" fill="#c0562f"/>
-          <path d="M50 92c10 10 18 10 28 0" fill="none" stroke="#d7b091" stroke-width="6" stroke-linecap="round"/>
-        </svg>`
-      ),
-    tint: "#caa0ff"
-  }
+  makeLetterBall({ id: "dog", name: "강아지", c0: "#ffd36b", c1: "#ff2e7a", tint: "#ffb000" }),
+  makeLetterBall({ id: "rabbit", name: "토끼", c0: "#7df3d3", c1: "#2aa6ff", tint: "#45f3c3" }),
+  makeLetterBall({ id: "hamster", name: "햄스터", c0: "#ffe9b7", c1: "#caa0ff", tint: "#caa0ff" }),
 ];
 
+// Library for adding new balls (capped to 15).
+export const BALL_LIBRARY = [
+  ...DEFAULT_BALLS,
+  makeLetterBall({ id: "cat", name: "고양이", c0: "#ff7ad9", c1: "#7a5cff", tint: "#ff7ad9" }),
+  makeLetterBall({ id: "guineapig", name: "기니피그", c0: "#ffde7a", c1: "#ff7a7a", tint: "#ffde7a" }),
+  makeLetterBall({ id: "panda", name: "판다", c0: "#5df0ff", c1: "#00ffa8", tint: "#5df0ff" }),
+  makeLetterBall({ id: "redpanda", name: "레서판다", c0: "#ffb36b", c1: "#ff4d6d", tint: "#ffb36b" }),
+  makeLetterBall({ id: "capybara", name: "카피바라", c0: "#ffd36b", c1: "#8bffb0", tint: "#ffd36b" }),
+  makeLetterBall({ id: "quokka", name: "쿼카", c0: "#caa0ff", c1: "#2aa6ff", tint: "#caa0ff" }),
+  makeLetterBall({ id: "otter", name: "수달", c0: "#7df3d3", c1: "#ffb000", tint: "#7df3d3" }),
+  makeLetterBall({ id: "tiger", name: "호랑이", c0: "#ffb000", c1: "#ff4d6d", tint: "#ffb000" }),
+  makeLetterBall({ id: "fox", name: "여우", c0: "#ff9f2e", c1: "#ff2e7a", tint: "#ff9f2e" }),
+  makeLetterBall({ id: "magpie", name: "까치", c0: "#9afcff", c1: "#ffffff", tint: "#9afcff" }),
+  makeLetterBall({ id: "elephant", name: "코끼리", c0: "#9aa8c4", c1: "#2aa6ff", tint: "#9aa8c4" }),
+  makeLetterBall({ id: "penguin", name: "펭귄", c0: "#2aa6ff", c1: "#00ffa8", tint: "#2aa6ff" }),
+];

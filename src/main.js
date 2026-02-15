@@ -14,6 +14,7 @@ import {
 import { makeRenderer } from "./game/render.js";
 import { loadBallsCatalog, loadBallCounts, saveBallsCatalog, saveBallCounts } from "./ui/storage.js";
 import { mountSettingsDialog } from "./ui/settings.js";
+import { BALL_LIBRARY } from "./game/assets.js";
 
 const canvas = document.getElementById("game");
 const startBtn = document.getElementById("start-btn");
@@ -22,8 +23,6 @@ const settingsBtn = document.getElementById("settings-btn");
 const bgmBtn = document.getElementById("bgm-btn");
 const winnerBtn = document.getElementById("winner-btn");
 const ballsEl = document.getElementById("balls");
-const resultEl = document.getElementById("result");
-const hintEl = document.getElementById("hint");
 const minimap = document.getElementById("minimap");
 const viewLockEl = document.getElementById("view-lock");
 const minimapHintEl = document.getElementById("minimap-hint");
@@ -45,10 +44,7 @@ const addBallBtn = document.getElementById("add-ball");
 
 const winnerDialog = document.getElementById("winner-dialog");
 const winnerImgEl = document.getElementById("winner-img");
-const winnerTitleEl = document.getElementById("winner-title");
-const winnerSubEl = document.getElementById("winner-sub");
 const winnerNameEl = document.getElementById("winner-name");
-const winnerOrderEl = document.getElementById("winner-order");
 
 // Hand-tuned extra rotors can be added here (world coords or xFrac/yFrac in [0..1]).
 // These override the auto-added mid-section rotors (the early rotor ring stays).
@@ -85,7 +81,32 @@ const customRotors = [
 
 // Single finish slot: marbles pile in arrival order. (No per-slot outcomes.)
 const board = makeBoard({ layout: "zigzag", slotCount: 1, heightMultiplier: 10, elementScale: 0.85, customRotors });
+function normalizeBallIcons(catalog) {
+  const libById = new Map(BALL_LIBRARY.map((b) => [b.id, b]));
+  let changed = false;
+  const next = (Array.isArray(catalog) ? catalog : []).map((b) => {
+    const lib = libById.get(b?.id);
+    if (!lib) return b;
+
+    const url = String(b?.imageDataUrl || "");
+    const isSvg = url.startsWith("data:image/svg+xml");
+    const hasText = url.includes("%3Ctext") || url.includes("<text");
+
+    // Only migrate built-in SVG icons; keep user-provided PNG/JPEG/etc.
+    if (isSvg && !hasText) {
+      changed = true;
+      return { ...b, imageDataUrl: lib.imageDataUrl, tint: lib.tint };
+    }
+    return b;
+  });
+  return { next, changed };
+}
+
 let ballsCatalog = loadBallsCatalog();
+{
+  const { next, changed } = normalizeBallIcons(ballsCatalog);
+  if (changed) ballsCatalog = next;
+}
 saveBallsCatalog(ballsCatalog);
 
 const state = makeGameState({ seed: 1337, board, ballsCatalog });
@@ -140,42 +161,14 @@ const settings = mountSettingsDialog(
   setBalls
 );
 
-function makeNewBall() {
-  const h = Math.floor(Math.random() * 360);
-  const bg0 = `hsl(${h}, 95%, 58%)`;
-  const bg1 = `hsl(${(h + 60) % 360}, 95%, 52%)`;
-  const svg = encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="${bg0}"/>
-          <stop offset="1" stop-color="${bg1}"/>
-        </linearGradient>
-      </defs>
-      <rect width="128" height="128" rx="64" fill="url(#g)"/>
-      <circle cx="64" cy="74" r="38" fill="rgba(255,255,255,0.88)"/>
-      <circle cx="52" cy="72" r="4" fill="#111"/>
-      <circle cx="76" cy="72" r="4" fill="#111"/>
-      <path d="M56 90c7 7 15 7 22 0" fill="none" stroke="rgba(0,0,0,0.28)" stroke-width="6" stroke-linecap="round"/>
-    </svg>`
-  );
-  const idBase = `ball-${Date.now().toString(36)}`;
-  let id = idBase;
-  let n = 1;
-  while (ballsCatalog.some((b) => b.id === id)) {
-    id = `${idBase}-${n++}`;
-  }
-  return {
-    id,
-    name: "새 공",
-    imageDataUrl: `data:image/svg+xml;utf8,${svg}`,
-    tint: "#ffffff"
-  };
-}
-
 addBallBtn?.addEventListener("click", () => {
   if (state.mode === "playing") return;
-  const next = [...ballsCatalog, makeNewBall()];
+  // Cap to the curated library (15).
+  if (ballsCatalog.length >= BALL_LIBRARY.length) return;
+  const used = new Set(ballsCatalog.map((b) => b.id));
+  const nextBall = BALL_LIBRARY.find((b) => !used.has(b.id));
+  if (!nextBall) return;
+  const next = [...ballsCatalog, structuredClone(nextBall)];
   saveBallsCatalog(next);
   setBalls(next);
   settings.render?.();
@@ -269,22 +262,12 @@ renderBallCards();
 
 function updateControls() {
   const total = getTotalSelectedCount(state);
-  startBtn.disabled = state.mode === "playing";
+  startBtn.disabled = state.mode === "playing" || total <= 0;
   if (viewLockEl) {
     const v = renderer.getViewState?.();
     viewLockEl.disabled = !(state.mode === "playing" && state.released && v);
     viewLockEl.checked = !!tailFocusOn;
   }
-  hintEl.textContent =
-    state.mode === "playing"
-      ? state.released
-        ? `진행 중... 완료: ${state.finished.length}/${state.totalToDrop}`
-        : `준비 중... (시작을 누르면 바로 떨어집니다)`
-      : `수량을 고른 뒤 시작하세요. 총 ${total}개`;
-}
-
-function setResultText(msg) {
-  resultEl.textContent = msg || "";
 }
 
 function updateCanvasCoordReadout(xFrac, yFrac) {
@@ -484,12 +467,10 @@ function getWinnerPayloadFromState() {
   return {
     name,
     img: b?.imageDataUrl || "",
-    order: "",
-    total: 0
   };
 }
 
-function showWinnerModal() {
+function showWinnerModal({ fanfare = true } = {}) {
   if (!winnerDialog) return;
   const payload = lastWinner || getWinnerPayloadFromState();
   if (!payload) return;
@@ -498,12 +479,9 @@ function showWinnerModal() {
     winnerImgEl.src = payload.img || "";
     winnerImgEl.alt = payload.name;
   }
-  if (winnerTitleEl) winnerTitleEl.textContent = "마지막 공이 도착했습니다";
-  if (winnerSubEl) winnerSubEl.textContent = "";
   if (winnerNameEl) winnerNameEl.textContent = payload.name;
-  if (winnerOrderEl) winnerOrderEl.textContent = payload.order ? `${payload.order}${payload.total ? ` / ${payload.total}` : ""}` : "";
 
-  playFanfare();
+  if (fanfare) playFanfare();
   try {
     winnerDialog.showModal();
   } catch {
@@ -512,10 +490,7 @@ function showWinnerModal() {
 }
 
 function tryStart() {
-  if (getTotalSelectedCount(state) <= 0) {
-    setResultText("최소 1개 이상 선택하세요.");
-    return false;
-  }
+  if (getTotalSelectedCount(state) <= 0) return false;
   // Make each run unpredictable to the user, but still deterministic within the run.
   // (The seed is exposed via render_game_to_text for debugging/fairness.)
   state.seed = ((Date.now() & 0xffffffff) ^ (Math.random() * 0xffffffff)) >>> 0;
@@ -523,7 +498,6 @@ function tryStart() {
   startGame(state);
   state._shownResultId = null;
   state._shownWinnerT = null;
-  setResultText("");
   renderBallCards(); // disable +/- while playing
   updateControls();
   // Default to tail focus when a run starts.
@@ -532,8 +506,7 @@ function tryStart() {
   if (viewLockEl) viewLockEl.checked = true;
   setWinnerCache(null);
   // Start implies drop: release all marbles immediately.
-  const n = dropAll(state);
-  if (n) setResultText(`시작! ${n}개 투하`);
+  dropAll(state);
   return true;
 }
 
@@ -545,7 +518,6 @@ resetBtn.addEventListener("click", () => {
   resetGame(state);
   state._shownResultId = null;
   state._shownWinnerT = null;
-  setResultText("");
   renderBallCards();
   renderer.clearCameraOverride?.();
   tailFocusOn = true;
@@ -564,7 +536,7 @@ bgmBtn?.addEventListener("click", async () => {
 });
 
 winnerBtn?.addEventListener("click", () => {
-  showWinnerModal();
+  showWinnerModal({ fanfare: false });
 });
 
 // Drop position selection via clicking the board was removed (always uses the default spawn x).
@@ -609,7 +581,6 @@ function onAfterFrame() {
     const p = getWinnerPayloadFromState();
     if (p) {
       setWinnerCache(p);
-      setResultText(`마지막 도착: ${p.name} (${p.order}번째)`);
     }
     showWinnerModal();
   }
