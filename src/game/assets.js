@@ -25,10 +25,11 @@ function makeLetterBall({ id, name, c0, c1, tint }) {
         </defs>
         <rect width="128" height="128" rx="64" fill="url(#g)"/>
         <rect width="128" height="128" rx="64" fill="url(#v)"/>
-        <text x="64" y="78"
+        <text x="64" y="66"
           text-anchor="middle"
+          dominant-baseline="middle"
           font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
-          font-size="68"
+          font-size="72"
           font-weight="950"
           fill="rgba(255,255,255,0.96)"
           style="paint-order: stroke; stroke: rgba(0,0,0,0.45); stroke-width: 10px; stroke-linejoin: round;"

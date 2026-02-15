@@ -262,7 +262,9 @@ renderBallCards();
 
 function updateControls() {
   const total = getTotalSelectedCount(state);
-  startBtn.disabled = state.mode === "playing" || total <= 0;
+  const finished = !!state.winner;
+  startBtn.disabled = (!finished && state.mode === "playing") || total <= 0;
+  startBtn.textContent = finished ? "재시작" : "시작";
   if (viewLockEl) {
     const v = renderer.getViewState?.();
     viewLockEl.disabled = !(state.mode === "playing" && state.released && v);
@@ -511,6 +513,17 @@ function tryStart() {
 }
 
 startBtn.addEventListener("click", () => {
+  if (state.mode === "playing") {
+    if (!state.winner) return;
+    // Fast restart: no need to click "초기화" first.
+    resetGame(state);
+    state._shownResultId = null;
+    state._shownWinnerT = null;
+    renderer.clearCameraOverride?.();
+    tailFocusOn = true;
+    if (viewLockEl) viewLockEl.checked = true;
+    setWinnerCache(null);
+  }
   tryStart();
 });
 
