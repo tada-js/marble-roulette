@@ -251,10 +251,11 @@ export function step(state, dt) {
   if (state.mode !== "playing") return;
 
   // Heavier feel: lower gravity, lower bounciness, and more damping.
-  const g = 1050; // px/s^2 in world units
-  const restitution = 0.38;
-  const air = 0.988;
-  const maxV = 1700;
+  // Tuning goal: slower, heavier motion. We trade a bit of "pinball pop" for more weight.
+  const g = 900; // px/s^2 in world units
+  const restitution = 0.26;
+  const air = 0.982;
+  const maxV = 1350;
 
   const { worldW, worldH, slotH, pegRows, slots, slotW, topPad, pegGapY, corridor, wallSegments, wallBins, zigzag } =
     state.board;
@@ -436,6 +437,8 @@ export function step(state, dt) {
     // give it a deterministic nudge. This prevents permanent jams on fixed layouts with large counts.
     for (const m of state.marbles) {
       if (m.done) continue;
+      if (m._unstuckCdMs == null) m._unstuckCdMs = 0;
+      m._unstuckCdMs = Math.max(0, m._unstuckCdMs - dtSub * 1000);
       if (m._winMs == null) {
         m._winMs = 0;
         m._winY0 = m.y;
@@ -454,12 +457,23 @@ export function step(state, dt) {
       m._winYMin = m.y;
       m._winYMax = m.y;
 
-      // If we barely progressed and we're oscillating inside a tight pocket, kick it out.
-      if (dyNet < 25 && yRange < 120) {
+      const sp = Math.hypot(m.vx, m.vy);
+      if (dyNet > 35) m._unstuckHits = 0;
+
+      // If we barely progressed and we're oscillating inside a small pocket, kick it out.
+      // Guard with cooldown to avoid speeding up the whole simulation.
+      if (m._unstuckCdMs <= 0 && state.t > 2 && m.y > 180 && dyNet < 8 && yRange < 140 && sp < 240) {
         const dir = hash01(m.id) < 0.5 ? -1 : 1;
-        // Prefer a strong downward kick with only a small lateral separation.
+        const hits = (m._unstuckHits || 0) + 1;
+        m._unstuckHits = hits;
+        const k = Math.min(4, hits);
+        // Prefer a downward kick with only a small lateral separation.
         m.vx = m.vx * 0.35 + dir * 40;
-        m.vy = Math.max(m.vy, 0) + 520;
+        m.vy = Math.max(m.vy, 0) + 380 + 140 * (k - 1);
+        // Also move the marble slightly downward to break geometric "corner locks".
+        // (Velocity-only nudges can be canceled out by immediate wall pushes.)
+        m.y += Math.max(2, m.r * (0.7 + 0.5 * (k - 1)));
+        m._unstuckCdMs = 2500;
       }
     }
 
