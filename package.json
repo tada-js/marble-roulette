@@ -7,7 +7,7 @@
     "dev": "next dev -p 5173",
     "build": "next build",
     "start": "next start -p 5173",
-    "test": "node --test",
+    "test": "tsx --test",
     "lint": "next lint",
     "legacy:dev": "node scripts/dev-server.mjs",
     "legacy:lint": "node scripts/lint.mjs",
@@ -40,6 +40,7 @@
     "postcss": "^8.5.2",
     "tailwindcss": "^3.4.17",
     "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
 }

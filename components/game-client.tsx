@@ -11,7 +11,7 @@ export default function GameClient() {
 
     // Mount the existing game runtime. This is a bridge step: Next.js shell + legacy JS core.
     // Later iterations will move this into typed React components with server actions.
-    void import("../src/main.js");
+    void import("../src/main");
   }, []);
 
   // Keep the DOM structure/ids so the legacy runtime can attach listeners.
