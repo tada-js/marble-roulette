@@ -8,6 +8,7 @@ test("dropAll releases all marbles and winner is the last finisher", () => {
     { id: "dog", name: "강아지", imageDataUrl: "data:image/svg+xml;utf8,<svg/>", tint: "#fff" }
   ];
   const state = makeGameState({ seed: 42, board, ballsCatalog });
+  state.chaos.enabled = false;
   setBallCount(state, "dog", 5);
   startGame(state);
 

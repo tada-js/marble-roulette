@@ -1,6 +1,7 @@
 import {
   makeBoard,
   makeGameState,
+  makeRng,
   resetGame,
   setDropX,
   snapshotForText,
@@ -165,6 +166,10 @@ startBtn.addEventListener("click", () => {
     setResultText("Select at least 1 ball.");
     return;
   }
+  // Make each run unpredictable to the user, but still deterministic within the run.
+  // (The seed is exposed via render_game_to_text for debugging/fairness.)
+  state.seed = ((Date.now() & 0xffffffff) ^ (Math.random() * 0xffffffff)) >>> 0;
+  state.rng = makeRng(state.seed);
   startGame(state);
   state._shownResultId = null;
   setResultText("");
@@ -306,6 +311,24 @@ function drawMinimap() {
   minimapCtx.strokeStyle = "rgba(69,243,195,0.9)";
   minimapCtx.lineWidth = 2;
   minimapCtx.strokeRect(trackX + 1, trackY + trackH * y0, trackW - 2, Math.max(8, trackH * (y1 - y0)));
+
+  // Chaos markers (bumpers/portals) as tiny dots.
+  if (state.chaos?.enabled) {
+    for (const o of state.chaos.bumpers || []) {
+      const nx = o.x / worldW;
+      const ny = o.y / worldH;
+      minimapCtx.fillStyle = "rgba(255,176,0,0.75)";
+      minimapCtx.fillRect(trackX + trackW * nx - 1, trackY + trackH * ny - 1, 2, 2);
+    }
+    for (const p of state.chaos.portals || []) {
+      for (const end of [p.a, p.b]) {
+        const nx = end.x / worldW;
+        const ny = end.y / worldH;
+        minimapCtx.fillStyle = "rgba(202,160,255,0.85)";
+        minimapCtx.fillRect(trackX + trackW * nx - 1, trackY + trackH * ny - 1, 2, 2);
+      }
+    }
+  }
 
   // Marbles.
   const all = [...(state.pending || []), ...(state.marbles || [])];

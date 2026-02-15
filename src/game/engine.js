@@ -95,6 +95,14 @@ export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog =
     board,
     ballsCatalog,
     counts,
+    chaos: {
+      enabled: true,
+      rng: makeRng((seed ^ 0xa8f1d2c3) >>> 0),
+      bumpers: [],
+      spinners: [],
+      portals: [],
+      windZones: []
+    },
     pending: [],
     released: false,
     totalToDrop: 0,
@@ -153,6 +161,8 @@ export function startGame(state) {
   state.finished = [];
   state.winner = null;
   state.released = false;
+  state.chaos.rng = makeRng((state.seed ^ 0xa8f1d2c3) >>> 0);
+  if (state.chaos.enabled) generateChaosObjects(state);
 
   const queue = prepareDropQueue(state, { shuffle: true });
   state.totalToDrop = queue.length;
@@ -170,6 +180,10 @@ export function resetGame(state) {
   state.totalToDrop = 0;
   state.finished = [];
   state.winner = null;
+  state.chaos.bumpers = [];
+  state.chaos.spinners = [];
+  state.chaos.portals = [];
+  state.chaos.windZones = [];
 }
 
 export function dropAll(state) {
@@ -196,6 +210,15 @@ export function step(state, dt) {
 
   for (const m of state.marbles) {
     if (m.done) continue;
+
+    // Chaos: wind zones (adds horizontal acceleration).
+    if (state.chaos.enabled && state.chaos.windZones.length) {
+      for (const z of state.chaos.windZones) {
+        if (m.x < z.x0 || m.x > z.x1 || m.y < z.y0 || m.y > z.y1) continue;
+        const phase = z.phase + state.t * z.freq;
+        m.vx += Math.sin(phase) * z.ax * dt;
+      }
+    }
 
     m.vy += g * dt;
     m.vx *= air;
@@ -244,6 +267,11 @@ export function step(state, dt) {
         m.vy -= vtY * 0.04;
       }
     }
+    }
+
+    // Chaos: bumpers/spinners/portals (check near Y only).
+    if (state.chaos.enabled) {
+      applyChaosCollisions(state, m, restitution);
     }
 
     // Marble-marble collisions (simple impulse).
@@ -308,6 +336,13 @@ export function snapshotForText(state) {
     finishedCount: state.finished.length,
     winner: state.winner,
     dropX: Number(state.dropX.toFixed(1)),
+    chaos: {
+      enabled: state.chaos.enabled,
+      bumpers: state.chaos.bumpers.length,
+      spinners: state.chaos.spinners.length,
+      portals: state.chaos.portals.length,
+      windZones: state.chaos.windZones.length
+    },
     board: {
       worldW: b.worldW,
       worldH: b.worldH,
@@ -369,4 +404,162 @@ function layoutPending(state) {
     state.pending[i].x = clamp(x0 + col * gap, ballR + 2, worldW - ballR - 2);
     state.pending[i].y = 70 - row * (ballR * 1.9);
   }
+}
+
+function generateChaosObjects(state) {
+  const rnd = state.chaos.rng;
+  const b = state.board;
+
+  const bumpers = [];
+  const spinners = [];
+  const portals = [];
+  const windZones = [];
+
+  // Keep the spawn/top area cleaner.
+  const yStart = b.topPad + b.pegGapY * 4;
+  const yEnd = b.worldH - b.slotH - 220;
+
+  const bumperCount = Math.max(8, Math.round((b.rows / 16) * 12));
+  for (let i = 0; i < bumperCount; i++) {
+    const y = lerp(yStart, yEnd, (i + 1) / (bumperCount + 1)) + (rnd() - 0.5) * b.pegGapY * 2.5;
+    const x = lerp(b.sidePad, b.worldW - b.sidePad, rnd());
+    bumpers.push({
+      kind: "bumper",
+      x,
+      y,
+      r: b.ballR * 1.35,
+      strength: 700 + rnd() * 700
+    });
+  }
+
+  const spinnerCount = Math.max(6, Math.round((b.rows / 16) * 10));
+  for (let i = 0; i < spinnerCount; i++) {
+    const y = lerp(yStart, yEnd, (i + 0.5) / spinnerCount) + (rnd() - 0.5) * b.pegGapY * 2.0;
+    const x = lerp(b.sidePad, b.worldW - b.sidePad, rnd());
+    spinners.push({
+      kind: "spinner",
+      x,
+      y,
+      r: b.ballR * 1.55,
+      tangential: 520 + rnd() * 520,
+      dir: rnd() < 0.5 ? -1 : 1
+    });
+  }
+
+  // One portal pair, mid-ish and low-ish.
+  const pyA = lerp(yStart, yEnd, 0.35);
+  const pyB = lerp(yStart, yEnd, 0.72);
+  const pxA = lerp(b.sidePad, b.worldW - b.sidePad, 0.22 + rnd() * 0.25);
+  const pxB = lerp(b.sidePad, b.worldW - b.sidePad, 0.55 + rnd() * 0.25);
+  portals.push({
+    kind: "portal",
+    a: { x: pxA, y: pyA, r: b.ballR * 1.6 },
+    b: { x: pxB, y: pyB, r: b.ballR * 1.6 }
+  });
+
+  // Wind bands.
+  const windCount = 4;
+  for (let i = 0; i < windCount; i++) {
+    const y0 = lerp(yStart, yEnd, (i + 0.2) / windCount);
+    const y1 = y0 + b.pegGapY * (3.5 + rnd() * 3.5);
+    windZones.push({
+      kind: "wind",
+      x0: b.sidePad,
+      x1: b.worldW - b.sidePad,
+      y0,
+      y1,
+      ax: 380 + rnd() * 520,
+      freq: 0.8 + rnd() * 0.9,
+      phase: rnd() * Math.PI * 2
+    });
+  }
+
+  state.chaos.bumpers = bumpers;
+  state.chaos.spinners = spinners;
+  state.chaos.portals = portals;
+  state.chaos.windZones = windZones;
+}
+
+function applyChaosCollisions(state, m, restitution) {
+  const b = state.board;
+  const rnd = state.chaos.rng;
+  const yMin = m.y - m.r - 160;
+  const yMax = m.y + m.r + 160;
+
+  // Bumpers: radial boost.
+  for (const o of state.chaos.bumpers) {
+    if (o.y < yMin || o.y > yMax) continue;
+    const dx = m.x - o.x;
+    const dy = m.y - o.y;
+    const sumR = m.r + o.r;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= sumR * sumR || d2 === 0) continue;
+    const d = Math.sqrt(d2);
+    const nx = dx / d;
+    const ny = dy / d;
+    const push = sumR - d;
+    m.x += nx * push;
+    m.y += ny * push;
+    const vn = m.vx * nx + m.vy * ny;
+    if (vn < 0) {
+      m.vx -= (1 + restitution) * vn * nx;
+      m.vy -= (1 + restitution) * vn * ny;
+    }
+    const jitter = 0.8 + rnd() * 0.6;
+    m.vx += nx * o.strength * jitter;
+    m.vy += ny * o.strength * jitter;
+  }
+
+  // Spinners: tangential impulse.
+  for (const o of state.chaos.spinners) {
+    if (o.y < yMin || o.y > yMax) continue;
+    const dx = m.x - o.x;
+    const dy = m.y - o.y;
+    const sumR = m.r + o.r;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= sumR * sumR || d2 === 0) continue;
+    const d = Math.sqrt(d2);
+    const nx = dx / d;
+    const ny = dy / d;
+    const push = sumR - d;
+    m.x += nx * push;
+    m.y += ny * push;
+    // Tangential direction (-ny, nx)
+    const tx = -ny * o.dir;
+    const ty = nx * o.dir;
+    const kick = o.tangential * (0.7 + rnd() * 0.6);
+    m.vx += tx * kick;
+    m.vy += ty * kick;
+  }
+
+  // Portals: teleport with cooldown.
+  const cd = 0.45;
+  if (typeof m._portalCdT !== "number") m._portalCdT = -999;
+  if (state.t - m._portalCdT < cd) return;
+  for (const p of state.chaos.portals) {
+    const hitA = circleHit(m, p.a);
+    const hitB = circleHit(m, p.b);
+    if (!hitA && !hitB) continue;
+    const to = hitA ? p.b : p.a;
+    // Place at destination with small offset.
+    const ang = rnd() * Math.PI * 2;
+    m.x = clamp(to.x + Math.cos(ang) * (m.r + 4), m.r + 2, b.worldW - m.r - 2);
+    m.y = clamp(to.y + Math.sin(ang) * (m.r + 4), m.r + 2, b.worldH - b.slotH - m.r - 2);
+    // Add velocity jitter so it doesn't feel scripted.
+    m.vx = (m.vx * 0.55) + (rnd() - 0.5) * 900;
+    m.vy = Math.max(0, m.vy * 0.35) + rnd() * 240;
+    m._portalCdT = state.t;
+    break;
+  }
+}
+
+function circleHit(m, c) {
+  const dx = m.x - c.x;
+  const dy = m.y - c.y;
+  const sumR = m.r + c.r;
+  return dx * dx + dy * dy < sumR * sumR;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
 }

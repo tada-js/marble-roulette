@@ -165,6 +165,54 @@ export function makeRenderer(canvas, { board }) {
       }
     }
 
+    // Chaos objects (bumpers/spinners/portals/wind zones).
+    if (state.chaos?.enabled) {
+      // Wind zones as faint bands.
+      for (const z of state.chaos.windZones || []) {
+        if (z.y1 < view.cameraY || z.y0 > view.cameraY + view.viewHWorld) continue;
+        ctx.fillStyle = "rgba(69, 243, 195, 0.06)";
+        ctx.fillRect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0);
+      }
+
+      // Bumpers.
+      for (const o of state.chaos.bumpers || []) {
+        if (o.y < view.cameraY - 120 || o.y > view.cameraY + view.viewHWorld + 120) continue;
+        ctx.strokeStyle = "rgba(255, 176, 0, 0.75)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Spinners.
+      for (const o of state.chaos.spinners || []) {
+        if (o.y < view.cameraY - 120 || o.y > view.cameraY + view.viewHWorld + 120) continue;
+        ctx.strokeStyle = "rgba(125, 243, 211, 0.75)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(o.x - o.r * 0.7, o.y);
+        ctx.lineTo(o.x + o.r * 0.7, o.y);
+        ctx.stroke();
+      }
+
+      // Portals.
+      for (const p of state.chaos.portals || []) {
+        for (const end of [p.a, p.b]) {
+          if (end.y < view.cameraY - 120 || end.y > view.cameraY + view.viewHWorld + 120) continue;
+          ctx.strokeStyle = "rgba(202, 160, 255, 0.85)";
+          ctx.lineWidth = 3;
+          ctx.setLineDash([8, 8]);
+          ctx.beginPath();
+          ctx.arc(end.x, end.y, end.r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
     // Drop guide.
     if (state.mode === "playing") {
       ctx.strokeStyle = "rgba(255, 176, 0, 0.50)";
