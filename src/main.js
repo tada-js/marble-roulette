@@ -18,7 +18,6 @@ import { BALL_LIBRARY } from "./game/assets.js";
 
 const canvas = document.getElementById("game");
 const startBtn = document.getElementById("start-btn");
-const resetBtn = document.getElementById("reset-btn");
 const settingsBtn = document.getElementById("settings-btn");
 const bgmBtn = document.getElementById("bgm-btn");
 const winnerBtn = document.getElementById("winner-btn");
@@ -263,8 +262,8 @@ renderBallCards();
 function updateControls() {
   const total = getTotalSelectedCount(state);
   const finished = !!state.winner;
-  startBtn.disabled = (!finished && state.mode === "playing") || total <= 0;
-  startBtn.textContent = finished ? "재시작" : "시작";
+  startBtn.disabled = total <= 0;
+  startBtn.textContent = state.mode === "playing" ? "재시작" : "시작";
   if (viewLockEl) {
     const v = renderer.getViewState?.();
     viewLockEl.disabled = !(state.mode === "playing" && state.released && v);
@@ -514,7 +513,6 @@ function tryStart() {
 
 startBtn.addEventListener("click", () => {
   if (state.mode === "playing") {
-    if (!state.winner) return;
     // Fast restart: no need to click "초기화" first.
     resetGame(state);
     state._shownResultId = null;
@@ -525,18 +523,6 @@ startBtn.addEventListener("click", () => {
     setWinnerCache(null);
   }
   tryStart();
-});
-
-resetBtn.addEventListener("click", () => {
-  resetGame(state);
-  state._shownResultId = null;
-  state._shownWinnerT = null;
-  renderBallCards();
-  renderer.clearCameraOverride?.();
-  tailFocusOn = true;
-  if (viewLockEl) viewLockEl.checked = true;
-  setWinnerCache(null);
-  updateControls();
 });
 
 settingsBtn.addEventListener("click", () => {
