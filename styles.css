@@ -384,7 +384,8 @@ canvas#game {
   position: absolute;
   left: 0;
   bottom: calc(100% + 8px);
-  max-width: 260px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
   padding: 6px 10px;
   border-radius: 10px;
   background: rgba(17, 24, 39, 0.94);
@@ -399,8 +400,9 @@ canvas#game {
   transition: opacity 90ms ease, transform 90ms ease;
   pointer-events: none;
   z-index: 50;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tooltip::before {
   content: "";
