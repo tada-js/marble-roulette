@@ -1,4 +1,5 @@
 import { saveBallsCatalog, restoreDefaultBalls } from "./storage.js";
+import { createButton } from "./components/button.js";
 
 export function mountSettingsDialog(dialogEl, listEl, restoreBtn, getBalls, setBalls) {
   function render() {
@@ -45,14 +46,15 @@ export function mountSettingsDialog(dialogEl, listEl, restoreBtn, getBalls, setB
       fileInput.type = "file";
       fileInput.accept = "image/*";
       fileInput.className = "fileRow__input";
-      const fileBtn = document.createElement("button");
-      fileBtn.type = "button";
-      fileBtn.className = "btn btn--ghost fileRow__btn";
-      fileBtn.textContent = "파일 선택";
+      const fileBtn = createButton({
+        text: "파일 선택",
+        type: "button",
+        className: "btn btn--ghost fileRow__btn",
+        onClick: () => fileInput.click()
+      });
       const fileName = document.createElement("div");
       fileName.className = "fileRow__name";
       fileName.textContent = "선택 안 함";
-      fileBtn.addEventListener("click", () => fileInput.click());
       fileInput.addEventListener("change", async () => {
         const f = fileInput.files?.[0];
         fileName.textContent = f?.name ? f.name.slice(0, 32) : "선택 안 함";
@@ -88,10 +90,11 @@ export function mountSettingsDialog(dialogEl, listEl, restoreBtn, getBalls, setB
 
       const actions = document.createElement("div");
       actions.className = "twItem__actions";
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "btn btn--danger twItem__remove";
-      removeBtn.textContent = "삭제";
+      const removeBtn = createButton({
+        text: "삭제",
+        type: "button",
+        className: "btn btn--danger twItem__remove"
+      });
       // Keep at least one ball, and keep within the curated library ids where possible.
       removeBtn.disabled = balls.length <= 1;
       removeBtn.addEventListener("click", () => {

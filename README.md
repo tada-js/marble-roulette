@@ -21,11 +21,20 @@ npm run dev
 
 브라우저에서 `http://localhost:5173` 접속.
 
+Vite 기반 점진 마이그레이션(1단계) 개발 서버:
+
+```bash
+npm run dev:vite
+```
+
+브라우저에서 `http://localhost:5173` 접속.
+
 ## Tests
 
 ```bash
 npm test
 npm run lint
+npm run build:vite
 ```
 
 ## GitHub Flow
