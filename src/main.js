@@ -275,9 +275,9 @@ function updateControls() {
   const total = getTotalSelectedCount(state);
   startBtn.disabled = total <= 0;
   // While playing (before the last ball arrives), the button acts as a quick restart.
-  // After the game ends, show it as "시작" for the next run.
+  // After the game ends, show it as "게임 시작" for the next run.
   const inRun = state.mode === "playing" && !state.winner;
-  startBtn.textContent = inRun ? "재시작" : "시작";
+  startBtn.textContent = inRun ? "게임 재시작" : "게임 시작";
   if (viewLockEl) {
     const v = renderer.getViewState?.();
     viewLockEl.disabled = !(state.mode === "playing" && state.released && v);
