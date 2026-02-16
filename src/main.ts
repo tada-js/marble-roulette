@@ -177,6 +177,7 @@ addBallBtn.addEventListener("click", () => {
   saveBallsCatalog(next);
   setBalls(next);
   settings.render();
+  updateControls();
 });
 
 /** renderBallCards helper. */

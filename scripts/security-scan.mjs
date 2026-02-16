@@ -4,7 +4,7 @@ import path from "node:path";
 const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 
 const TEXT_EXT = new Set([".js", ".mjs", ".html", ".css", ".md", ".yml", ".yaml", ".json"]);
-const IGNORE_DIR = new Set([".git", "node_modules"]);
+const IGNORE_DIR = new Set([".git", "node_modules", ".next", "coverage", "dist", "build"]);
 
 // High-confidence patterns only. Avoid noisy "SECRET"/"TOKEN" keywords.
 const RULES = [
