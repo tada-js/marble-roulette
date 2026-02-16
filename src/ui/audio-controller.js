@@ -35,6 +35,27 @@ export function createAudioController(opts = {}) {
   }
 
   /**
+   * @param {HTMLAudioElement} audio
+   */
+  function destroyAudio(audio) {
+    const meta = trackMap.get(audio);
+    if (meta?.onError) {
+      try {
+        audio.removeEventListener("error", meta.onError);
+      } catch {
+        // ignore
+      }
+    }
+    if (meta) meta.disposed = true;
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
    * @param {unknown} value
    */
   function isValidTrack(value) {
@@ -46,27 +67,36 @@ export function createAudioController(opts = {}) {
    */
   function createAudio(trackId) {
     const sources = TRACKS[trackId];
-    let sourceIndex = 0;
-    const audio = new Audio(sources[sourceIndex]);
+    const audio = new Audio(sources[0]);
     audio.preload = "auto";
     audio.loop = true;
     audio.volume = BGM_VOLUME;
 
-    audio.addEventListener("error", () => {
-      if (sourceIndex >= sources.length - 1) return;
-      sourceIndex += 1;
-      audio.src = sources[sourceIndex];
+    const meta = {
+      trackId,
+      sourceIndex: 0,
+      disposed: false,
+      onError: null,
+    };
+
+    const onError = () => {
+      const current = trackMap.get(audio);
+      if (!current || current.disposed) return;
+      if (current.sourceIndex >= sources.length - 1) return;
+      current.sourceIndex += 1;
+      audio.src = sources[current.sourceIndex];
       audio.load();
       if (bgm.on) {
         void audio.play().catch(() => {
           armAutostart();
         });
       }
-      const meta = trackMap.get(audio);
-      if (meta) meta.sourceIndex = sourceIndex;
-    });
+    };
 
-    trackMap.set(audio, { trackId, sourceIndex });
+    meta.onError = onError;
+    audio.addEventListener("error", onError);
+
+    trackMap.set(audio, meta);
     return audio;
   }
 
@@ -86,13 +116,7 @@ export function createAudioController(opts = {}) {
     const currentTrack = trackMap.get(bgm.audio);
     if (currentTrack?.trackId === bgm.track) return;
 
-    try {
-      bgm.audio.pause();
-      bgm.audio.src = "";
-      bgm.audio.load();
-    } catch {
-      // ignore
-    }
+    destroyAudio(bgm.audio);
 
     bgm.audio = createAudio(bgm.track);
   }
