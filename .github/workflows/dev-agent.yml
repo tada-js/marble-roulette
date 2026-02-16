@@ -1,0 +1,126 @@
+name: dev-agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "구현 작업 요약"
+        required: true
+        type: string
+      base_branch:
+        description: "기준 브랜치"
+        required: false
+        default: "main"
+        type: string
+      branch_name:
+        description: "생성할 브랜치명(비우면 자동 생성)"
+        required: false
+        type: string
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  kickoff:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request == null &&
+       startsWith(github.event.comment.body, '/implement '))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create implementation branch + draft PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const isDispatch = context.eventName === "workflow_dispatch";
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const task = isDispatch
+              ? `${context.payload.inputs.task || ""}`.trim()
+              : context.payload.comment.body.replace("/implement", "").trim();
+
+            if (!task) {
+              core.setFailed("작업 설명(task)이 비어 있습니다.");
+              return;
+            }
+
+            const baseBranch = isDispatch
+              ? `${context.payload.inputs.base_branch || "main"}`.trim()
+              : context.payload.repository.default_branch;
+
+            const requestedBranch = isDispatch
+              ? `${context.payload.inputs.branch_name || ""}`.trim()
+              : "";
+
+            const slug = task
+              .toLowerCase()
+              .replace(/[^a-z0-9가-힣\s-]/g, "")
+              .trim()
+              .replace(/\s+/g, "-")
+              .slice(0, 30);
+
+            const fallback = `codex/dev-agent-${Date.now()}`;
+            const branch = requestedBranch || `codex/${slug || fallback.replace("codex/", "")}`;
+
+            const baseRef = await github.rest.git.getRef({
+              owner,
+              repo,
+              ref: `heads/${baseBranch}`,
+            });
+
+            const baseSha = baseRef.data.object.sha;
+            try {
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/heads/${branch}`,
+                sha: baseSha,
+              });
+            } catch (error) {
+              if (error.status !== 422) throw error;
+            }
+
+            const body = [
+              "## Dev Agent 작업 요청",
+              "",
+              `- 작업: ${task}`,
+              `- 기준 브랜치: \`${baseBranch}\``,
+              `- 작업 브랜치: \`${branch}\``,
+              "",
+              "## 체크리스트",
+              "- [ ] 기능 구현",
+              "- [ ] lint / test / build 통과",
+              "- [ ] Reviewer Agent 코멘트 확인",
+              "",
+              "이 PR은 구현 에이전트 분리 운영을 위한 자동 생성 Draft PR입니다.",
+            ].join("\n");
+
+            const pr = await github.rest.pulls.create({
+              owner,
+              repo,
+              head: branch,
+              base: baseBranch,
+              title: `[Dev Agent] ${task}`,
+              body,
+              draft: true,
+            });
+
+            if (context.eventName === "issue_comment") {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: context.payload.issue.number,
+                body: `구현용 Draft PR을 생성했습니다: ${pr.data.html_url}`,
+              });
+            }
+
+            core.summary
+              .addHeading("Dev Agent")
+              .addRaw(`브랜치: ${branch}\n\n`)
+              .addRaw(`PR: ${pr.data.html_url}\n`)
+              .write();

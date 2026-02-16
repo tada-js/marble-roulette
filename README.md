@@ -32,4 +32,16 @@ npm run lint
 
 - `main`: 배포/릴리즈 기준
 - 작업은 `codex/<topic>` 또는 `feature/<topic>` 브랜치 생성
-- PR로 `main`에 머지 (CodeRabbit 리뷰 활용)
+- PR로 `main`에 머지 (Reviewer Agent 체크 통과 권장)
+
+## Agent Automation
+
+- 구현 에이전트(`dev-agent`)
+  - 수동 실행: GitHub Actions에서 `dev-agent` 실행 후 `task` 입력
+  - 코멘트 실행: 이슈에 `/implement <작업요약>` 코멘트를 남기면 Draft PR 자동 생성
+- 리뷰어 에이전트(`reviewer-agent`)
+  - PR 생성/업데이트 시 자동 실행
+  - `lint/test/build/security`를 실행하고 시니어 리뷰 형식 코멘트를 PR에 갱신
+  - 하나라도 실패하면 check 실패로 머지 게이트 역할 수행
+
+브랜치 보호 규칙에서 `reviewer-agent / senior-review`를 Required check로 지정하면 구현/리뷰 분리 운영이 완성됩니다.
