@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Keep the existing neon game styling (ported from styles.css) while we migrate to Tailwind/Shadcn. */
+

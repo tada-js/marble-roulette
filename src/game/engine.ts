@@ -1,7 +1,32 @@
 // Lightweight, deterministic-ish pinball/ladder simulation (no external deps).
+import type {
+  BallCatalogEntry,
+  Board,
+  Corridor,
+  FinishRecord,
+  FixedEntity,
+  GameState,
+  MakeBoardOptions,
+  Marble,
+  MarbleResult,
+  Peg,
+  Slot,
+  SegmentBins,
+  WallSegment,
+  ZigzagLayout,
+  RouletteLayout,
+  Rng,
+  Propeller,
+  Rotor,
+} from "./types";
 
+/**
+ * Create a deterministic RNG from a numeric seed.
+ *
+ * Note: this is not cryptographically secure; it is meant for gameplay and tests.
+ */
 /** makeRng helper. */
-export function makeRng(seed) {
+export function makeRng(seed: number): Rng {
   let x = seed >>> 0;
   return () => {
     // xorshift32
@@ -12,6 +37,10 @@ export function makeRng(seed) {
   };
 }
 
+/**
+ * Build a board (layout + entities) based on options.
+ * Pure construction: does not mutate or depend on existing game state.
+ */
 /** makeBoard helper. */
 export function makeBoard({
   worldW = 900,
@@ -29,7 +58,7 @@ export function makeBoard({
   corridorEnabled = true,
   customRotors = null, // zigzag: user-provided extra circular rotors
   layout = "classic" // classic | roulette | zigzag
-} = {}) {
+}: MakeBoardOptions = {}): Board {
   const baseH = worldH;
   const baseRows = rows;
   const mul = Math.max(1, Math.floor(heightMultiplier));
@@ -44,14 +73,15 @@ export function makeBoard({
 
   const pegGapX = (worldW - sidePad * 2) / (cols - 1);
   const pegGapY = (worldH - topPad - slotH - 120) / (rows - 1);
-  let pegs = [];
-  let pegRows = [];
+  let pegs: Peg[] = [];
+  let pegRows: Peg[][] = [];
 
   // Fixed map layouts: polylines + boxes + optional propellers (no procedural pegs).
-  const roulette = layout === "roulette" ? makeRouletteLayout({ worldW, worldH, slotH }) : null;
-  const zigzag = layout === "zigzag" ? makeZigzagLayout({ worldW, worldH, slotH, ballR, customRotors }) : null;
+  const roulette: RouletteLayout | null = layout === "roulette" ? makeRouletteLayout({ worldW, worldH, slotH }) : null;
+  const zigzag: ZigzagLayout | null =
+    layout === "zigzag" ? makeZigzagLayout({ worldW, worldH, slotH, ballR, customRotors }) : null;
   const fixed = roulette || zigzag;
-  const wallSegments = fixed ? buildWallSegments(fixed.entities) : [];
+  const wallSegments: WallSegment[] = fixed ? buildWallSegments(fixed.entities) : [];
   const wallBins = wallSegments.length ? buildSegmentBins(wallSegments, 260) : null;
 
   if (layout === "classic") {
@@ -61,7 +91,7 @@ export function makeBoard({
       const y = topPad + r * pegGapY;
       const offset = (r % 2) * (pegGapX / 2);
       const count = r % 2 ? cols - 1 : cols;
-      const rowPegs = [];
+      const rowPegs: Peg[] = [];
       for (let c = 0; c < count; c++) {
         const x = sidePad + c * pegGapX + offset;
         if (corridor) {
@@ -69,7 +99,7 @@ export function makeBoard({
           const { left, right } = corridorAt(corridor, y);
           if (x - pegR < left + 6 || x + pegR > right - 6) continue;
         }
-        const peg = { x, y, r: pegR };
+        const peg: Peg = { x, y, r: pegR };
         pegs.push(peg);
         rowPegs.push(peg);
       }
@@ -77,7 +107,7 @@ export function makeBoard({
     }
   }
 
-  const slots = [];
+  const slots: Slot[] = [];
   const slotW = worldW / slotCount;
   for (let i = 0; i < slotCount; i++) {
     slots.push({
@@ -114,9 +144,22 @@ export function makeBoard({
   };
 }
 
+/**
+ * Create a new game state for a given board + ball catalog.
+ *
+ * The returned object is mutated in-place by the engine functions.
+ */
 /** makeGameState helper. */
-export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog = [] } = {}) {
-  const counts = {};
+export function makeGameState({
+  seed = 1234,
+  board = makeBoard(),
+  ballsCatalog = []
+}: {
+  seed?: number;
+  board?: Board;
+  ballsCatalog?: BallCatalogEntry[];
+} = {}): GameState {
+  const counts: Record<string, number> = {};
   for (const b of ballsCatalog) counts[b.id] = 1;
   return {
     mode: "menu", // menu | playing
@@ -141,28 +184,32 @@ export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog =
   };
 }
 
-/** setBallCount helper. */
-export function setBallCount(state, id, count) {
+/** Set the selected count for a ball ID (clamped to [0..99]). */
+export function setBallCount(state: GameState, id: string, count: number): void {
   if (!state.ballsCatalog.some((b) => b.id === id)) return;
   const safe = clampInt(Number(count) || 0, 0, 99);
   state.counts[id] = safe;
 }
 
-/** getBallCount helper. */
-export function getBallCount(state, id) {
+/** Get the selected count for a ball ID (defaults to 0). */
+export function getBallCount(state: GameState, id: string): number {
   return clampInt(state.counts?.[id] ?? 0, 0, 99);
 }
 
-/** getTotalSelectedCount helper. */
-export function getTotalSelectedCount(state) {
+/** Sum of all selected ball counts. */
+export function getTotalSelectedCount(state: GameState): number {
   let total = 0;
   for (const b of state.ballsCatalog) total += getBallCount(state, b.id);
   return total;
 }
 
+/**
+ * Expand `state.counts` into a drop queue of ball IDs.
+ * If `shuffle` is enabled, the queue is shuffled deterministically from the seed.
+ */
 /** prepareDropQueue helper. */
-export function prepareDropQueue(state, { shuffle = true } = {}) {
-  const queue = [];
+export function prepareDropQueue(state: GameState, { shuffle = true }: { shuffle?: boolean } = {}): string[] {
+  const queue: string[] = [];
   for (const b of state.ballsCatalog) {
     const n = getBallCount(state, b.id);
     for (let i = 0; i < n; i++) queue.push(b.id);
@@ -178,8 +225,12 @@ export function prepareDropQueue(state, { shuffle = true } = {}) {
   return queue;
 }
 
+/**
+ * Set the desired drop X coordinate (world units).
+ * Clamped to valid spawn bounds for the current layout.
+ */
 /** setDropX helper. */
-export function setDropX(state, x) {
+export function setDropX(state: GameState, x: number): void {
   const pad = state.board.ballR + 2;
   const spawnBoundsAtY =
     state.board.layout === "roulette"
@@ -199,8 +250,12 @@ export function setDropX(state, x) {
   if (state.mode === "playing" && !state.released) layoutPending(state);
 }
 
+/**
+ * Start a run: initialize runtime arrays and pre-build the pending marbles queue.
+ * Does not release marbles; call `dropAll` to release.
+ */
 /** startGame helper. */
-export function startGame(state) {
+export function startGame(state: GameState): void {
   state.mode = "playing";
   state.t = 0;
   state.marbles = [];
@@ -217,8 +272,8 @@ export function startGame(state) {
   layoutPending(state);
 }
 
-/** resetGame helper. */
-export function resetGame(state) {
+/** Reset to menu state without rebuilding the board or changing selected counts. */
+export function resetGame(state: GameState): void {
   state.mode = "menu";
   state.t = 0;
   state.marbles = [];
@@ -232,8 +287,12 @@ export function resetGame(state) {
   state._binCounts = Array.from({ length: state.board.slotCount }, () => 0);
 }
 
+/**
+ * Release all pending marbles immediately.
+ * Returns the number released (or null if not currently playing).
+ */
 /** dropAll helper. */
-export function dropAll(state) {
+export function dropAll(state: GameState): number | null {
   if (state.mode !== "playing") return null;
   if (state.released) return 0;
   if (!state.pending.length) return 0;
@@ -247,8 +306,14 @@ export function dropAll(state) {
   return n;
 }
 
+/**
+ * Advance the simulation by `dt` seconds.
+ *
+ * For deterministic playback/tests, call this with a fixed timestep
+ * (see `window.advanceTime` in main.ts).
+ */
 /** step helper. */
-export function step(state, dt) {
+export function step(state: GameState, dt: number): void {
   if (state.mode !== "playing") return;
 
   // Heavier feel: lower gravity, lower bounciness, and more damping.
@@ -309,14 +374,14 @@ export function step(state, dt) {
         if (!m.result) {
           // If there is only one finish slot, treat "label" as arrival order.
           const order = n + 1;
-          const label = slots.length === 1 ? String(order) : slots[idx].label;
-          m.result = { slot: idx, label };
+          const label = slots.length === 1 ? String(order) : slots[idx]!.label;
+          m.result = { slot: idx, label } satisfies MarbleResult;
           state.lastResult = { marbleId: m.id, ballId: m.ballId, ...m.result };
-          state.finished.push({ marbleId: m.id, ballId: m.ballId, t: state.t, ...m.result });
+          state.finished.push({ marbleId: m.id, ballId: m.ballId, t: state.t, ...m.result } satisfies FinishRecord);
         }
 
         // Immediately place into a deterministic pile inside the slot, so the bottom is visibly "filled".
-        const slot = slots[idx];
+        const slot = slots[idx]!;
         const zonePadBase = 22; // aligns with render.js slot zone inset
         const zonePad = Math.max(zonePadBase, m.r * 0.75);
         const zoneX0 = slot.x0 + zonePad;
@@ -475,12 +540,15 @@ export function step(state, dt) {
         m._winYMax = m.y;
       }
       m._winMs += dtSub * 1000;
-      m._winYMin = Math.min(m._winYMin, m.y);
-      m._winYMax = Math.max(m._winYMax, m.y);
+      const winYMin = m._winYMin ?? m.y;
+      const winYMax = m._winYMax ?? m.y;
+      m._winYMin = Math.min(winYMin, m.y);
+      m._winYMax = Math.max(winYMax, m.y);
       if (m._winMs < 900) continue;
 
-      const dyNet = m.y - m._winY0;
-      const yRange = m._winYMax - m._winYMin;
+      const winY0 = m._winY0 ?? m.y;
+      const dyNet = m.y - winY0;
+      const yRange = (m._winYMax ?? m.y) - (m._winYMin ?? m.y);
       m._winMs = 0;
       m._winY0 = m.y;
       m._winYMin = m.y;
@@ -515,8 +583,39 @@ export function step(state, dt) {
   }
 }
 
-/** snapshotForText helper. */
-export function snapshotForText(state) {
+export interface TextSnapshot {
+  note: string;
+  mode: GameState["mode"];
+  t: number;
+  counts: Record<string, number>;
+  pendingCount: number;
+  released: boolean;
+  totalToDrop: number;
+  finishedCount: number;
+  winner: FinishRecord | null;
+  dropX: number;
+  board: {
+    worldW: number;
+    worldH: number;
+    pegCount: number;
+    slotCount: number;
+    hasCorridor: boolean;
+  };
+  marbles: Array<{
+    id: string;
+    ballId: string;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    done: boolean;
+    result: MarbleResult | null;
+  }>;
+  lastResult: GameState["lastResult"];
+}
+
+/** Return a stable, JSON-serializable snapshot for automation/debug UI. */
+export function snapshotForText(state: GameState): TextSnapshot {
   const b = state.board;
   return {
     note: "coords: origin at top-left. x -> right, y -> down. units are canvas/world pixels.",
@@ -551,16 +650,16 @@ export function snapshotForText(state) {
 }
 
 /** clamp helper. */
-function clamp(v, a, b) {
+function clamp(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v));
 }
 /** clampInt helper. */
-function clampInt(v, a, b) {
+function clampInt(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v | 0));
 }
 
 /** makePendingMarble helper. */
-function makePendingMarble(state, ballId, idx) {
+function makePendingMarble(state: GameState, ballId: string, idx: number): Marble {
   const ball = state.ballsCatalog.find((b) => b.id === ballId);
   if (!ball) throw new Error(`unknown ballId: ${ballId}`);
   // Seeded jitter so marbles start slightly different even when dropped together.
@@ -581,7 +680,7 @@ function makePendingMarble(state, ballId, idx) {
 }
 
 /** layoutPending helper. */
-function layoutPending(state) {
+function layoutPending(state: GameState): void {
   const { worldW, ballR } = state.board;
   const n = state.pending.length;
   if (!n) return;
@@ -593,8 +692,7 @@ function layoutPending(state) {
         ? state.board.zigzag?.spawnY
         : null;
   const baseY = typeof spawnY === "number" ? spawnY : 70;
-  /** spawnBounds helper. */
-  const spawnBounds = (y) => {
+  const spawnBounds = (y: number): { left: number; right: number } => {
     const spawnBoundsAtY =
       state.board.layout === "roulette"
         ? state.board.roulette?.spawnBoundsAtY
@@ -637,7 +735,7 @@ function layoutPending(state) {
 }
 
 /** settleMarbles helper. */
-function settleMarbles(state, iterations) {
+function settleMarbles(state: GameState, iterations: number): void {
   const { worldW, wallSegments, wallBins, corridor } = state.board;
   const restitution = 0.25;
   const topY =
@@ -690,12 +788,12 @@ function settleMarbles(state, iterations) {
 }
 
 /** lerp helper. */
-function lerp(a, b, t) {
+function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
 /** makeCorridor helper. */
-function makeCorridor({ worldW, worldH, ballR }) {
+function makeCorridor({ worldW, worldH, ballR }: { worldW: number; worldH: number; ballR: number }): Corridor {
   const wideHalf = worldW / 2;
   const narrowW = ballR * 7.2; // ~2-3 balls through, depending on scale.
   const narrowHalf = Math.min(wideHalf, Math.max(narrowW / 2, ballR * 2.8));
@@ -706,7 +804,7 @@ function makeCorridor({ worldW, worldH, ballR }) {
 
   // Fixed "clear" bands where we remove objects for custom designs later.
   const bandH = Math.max(220, ballR * 18);
-  const bands = [];
+  const bands: Array<{ y0: number; y1: number }> = [];
   for (const t of [0.28, 0.58, 0.86]) {
     const cy = lerp(startY, endY, t);
     bands.push({ y0: cy - bandH / 2, y1: cy + bandH / 2 });
@@ -716,7 +814,7 @@ function makeCorridor({ worldW, worldH, ballR }) {
 }
 
 /** isClearZone helper. */
-function isClearZone(corridor, y) {
+function isClearZone(corridor: Corridor, y: number): boolean {
   for (const b of corridor.clearBands || []) {
     if (y >= b.y0 && y <= b.y1) return true;
   }
@@ -724,7 +822,7 @@ function isClearZone(corridor, y) {
 }
 
 /** corridorAt helper. */
-function corridorAt(corridor, y) {
+function corridorAt(corridor: Corridor, y: number): { left: number; right: number } {
   const cx = corridor.worldW / 2;
   const t = clamp((y - corridor.startY) / (corridor.endY - corridor.startY), 0, 1);
   // Smooth but steady narrowing.
@@ -736,13 +834,25 @@ function corridorAt(corridor, y) {
 }
 
 /** smoothstep helper. */
-function smoothstep(x) {
+function smoothstep(x: number): number {
   const t = clamp(x, 0, 1);
   return t * t * (3 - 2 * t);
 }
 
 /** makeZigzagLayout helper. */
-function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = null }) {
+function makeZigzagLayout({
+  worldW,
+  worldH,
+  slotH,
+  ballR = 18,
+  customRotors = null
+}: {
+  worldW: number;
+  worldH: number;
+  slotH: number;
+  ballR?: number;
+  customRotors?: MakeBoardOptions["customRotors"];
+}): ZigzagLayout {
   const padX = 32;
   const topY = 40;
   const spawnY = topY + 70;
@@ -759,8 +869,12 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
   const wideHalf = clamp(Math.max(320, narrowHalfA * 2.9), narrowHalfA * 2.2, Math.min(maxHalf, worldW * 0.46));
 
   const travelH = yEnd - topY;
-  const ky = (t) => topY + travelH * t;
-  const k = (t, cxFrac, hw) => ({ y: ky(t), cx: worldW * cxFrac, hw });
+  const ky = (t: number): number => topY + travelH * t;
+  const k = (t: number, cxFrac: number, hw: number): { y: number; cx: number; hw: number } => ({
+    y: ky(t),
+    cx: worldW * cxFrac,
+    hw
+  });
 
   // Zigzag keys: frequent, fixed left-right alternation to avoid long straight drops.
   // Then a wide mixing chamber with a rotating propeller, then more zigzag to the bottom.
@@ -795,7 +909,7 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
   ];
 
   /** profileAt helper. */
-  function profileAt(y) {
+  function profileAt(y: number): { y: number; cx: number; hw: number } {
     if (y <= keys[0].y) return keys[0];
     for (let i = 0; i < keys.length - 1; i++) {
       const a = keys[i];
@@ -809,23 +923,23 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
   }
 
   const sampleN = 200;
-  const left = [];
-  const right = [];
+  const left: Array<readonly [number, number]> = [];
+  const right: Array<readonly [number, number]> = [];
   for (let i = 0; i < sampleN; i++) {
     const y = topY + (i / (sampleN - 1)) * (yEnd - topY);
     const { cx, hw } = profileAt(y);
-    left.push([clamp(cx - hw, padX, worldW - padX), y]);
-    right.push([clamp(cx + hw, padX, worldW - padX), y]);
+    left.push([clamp(cx - hw, padX, worldW - padX), y] as const);
+    right.push([clamp(cx + hw, padX, worldW - padX), y] as const);
   }
 
-  const entities = [
+  const entities: FixedEntity[] = [
     { id: "outer-left", type: "polyline", points: left },
     { id: "outer-right", type: "polyline", points: right },
-    { id: "top-cap", type: "polyline", points: [[left[0][0], topY], [right[0][0], topY]] }
+    { id: "top-cap", type: "polyline", points: [[left[0]![0], topY] as const, [right[0]![0], topY] as const] }
   ];
 
   // Early circular rotors at the start (kept for early interaction).
-  const rotors = [];
+  const rotors: Rotor[] = [];
   {
     const yA = ky(0.095);
     const yB = ky(0.112);
@@ -884,7 +998,7 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
 
   // Zigzag: add straight propellers right after each bend to create interaction
   // without extra object systems.
-  const propellers = [];
+  const propellers: Propeller[] = [];
   let turnIdx = 0;
   for (let i = 0; i < keys.length - 1; i++) {
     const a = keys[i];
@@ -900,6 +1014,7 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
     const len = Math.max(80, Math.min(wantLen, maxLen));
     const dir = turnIdx % 2 ? -1 : 1;
     propellers.push({
+      id: `zigzag-bar-${turnIdx}`,
       x: prof.cx,
       y,
       len,
@@ -934,6 +1049,7 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
       const len = Math.max(120, Math.min(wantLen, maxLen * 0.92));
       const dir = i % 2 ? -1 : 1;
       propellers.push({
+        id: `exit-bar-${i}`,
         x,
         y,
         len,
@@ -1007,18 +1123,28 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
             ? cr.yFrac * worldH
             : null;
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      const r = Number.isFinite(cr.r) ? cr.r : clamp(ballR * 0.78, ballR * 0.55, ballR * 0.95);
+      const xN = x as number;
+      const yN = y as number;
+      const r =
+        typeof cr.r === "number" && Number.isFinite(cr.r) ? cr.r : clamp(ballR * 0.78, ballR * 0.55, ballR * 0.95);
+      const omega = typeof cr.omega === "number" && Number.isFinite(cr.omega) ? cr.omega : 11.0;
+      const maxSurf = typeof cr.maxSurf === "number" && Number.isFinite(cr.maxSurf) ? cr.maxSurf : 620;
+      const bounce = typeof cr.bounce === "number" && Number.isFinite(cr.bounce) ? cr.bounce : 0.28;
+      const kick = typeof cr.kick === "number" && Number.isFinite(cr.kick) ? cr.kick : 190;
+      const dampT = typeof cr.dampT === "number" && Number.isFinite(cr.dampT) ? cr.dampT : 0.02;
+      const down = typeof cr.down === "number" && Number.isFinite(cr.down) ? cr.down : 16;
+      const maxUp = typeof cr.maxUp === "number" && Number.isFinite(cr.maxUp) ? cr.maxUp : 20;
       rotors.push({
-        x: clamp(x, padX + r + 2, worldW - padX - r - 2),
-        y: clamp(y, 30 + r, worldH - slotH - 30 - r),
+        x: clamp(xN, padX + r + 2, worldW - padX - r - 2),
+        y: clamp(yN, 30 + r, worldH - slotH - 30 - r),
         r,
-        omega: Number.isFinite(cr.omega) ? cr.omega : 11.0,
-        maxSurf: Number.isFinite(cr.maxSurf) ? cr.maxSurf : 620,
-        bounce: Number.isFinite(cr.bounce) ? cr.bounce : 0.28,
-        kick: Number.isFinite(cr.kick) ? cr.kick : 190,
-        dampT: Number.isFinite(cr.dampT) ? cr.dampT : 0.02,
-        down: Number.isFinite(cr.down) ? cr.down : 16,
-        maxUp: Number.isFinite(cr.maxUp) ? cr.maxUp : 20
+        omega,
+        maxSurf,
+        bounce,
+        kick,
+        dampT,
+        down,
+        maxUp
       });
     }
   }
@@ -1029,7 +1155,7 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
     rotors,
     topY,
     spawnY,
-    spawnBoundsAtY: (y) => {
+    spawnBoundsAtY: (y: number) => {
       const { cx, hw } = profileAt(y);
       return { left: clamp(cx - hw, padX, worldW - padX), right: clamp(cx + hw, padX, worldW - padX) };
     }
@@ -1037,7 +1163,7 @@ function makeZigzagLayout({ worldW, worldH, slotH, ballR = 18, customRotors = nu
 }
 
 /** makeRouletteLayout helper. */
-function makeRouletteLayout({ worldW, worldH, slotH }) {
+function makeRouletteLayout({ worldW, worldH, slotH }: { worldW: number; worldH: number; slotH: number }): RouletteLayout {
   // Adapted from lazygyu/roulette "Wheel of fortune" stage polylines.
   // Coordinate system there is ~x:[1..24], y:[-300..111]. We shift y by +300 and scale to our world.
   const stagePolylines = [
@@ -1157,10 +1283,11 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
   const sy = usableH / Math.max(1e-6, yMax - yMin);
   const s = Math.min(sx, sy);
 
-  const polylines = stagePolylines.map((pl) => ({
+  type PolylineEntity = Extract<FixedEntity, { type: "polyline" }>;
+  const polylines: PolylineEntity[] = stagePolylines.map((pl) => ({
     id: pl.id,
     type: "polyline",
-    points: pl.points.map(([x, y]) => [padX + (x - xMin) * sx, padY + (y + yOff - yMin) * sy])
+    points: pl.points.map(([x, y]) => [padX + (x - xMin) * sx, padY + (y + yOff - yMin) * sy] as const)
   }));
 
   const outerLeft = polylines.find((p) => p.id === "outer-left")?.points || [];
@@ -1175,12 +1302,12 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
     id: "top-cap",
     type: "polyline",
     points: [
-      [capLeft, topY],
-      [capRight, topY]
+      [capLeft, topY] as const,
+      [capRight, topY] as const
     ]
   });
 
-  const boxes = stageBoxes.map((b) => ({
+  const boxes: FixedEntity[] = stageBoxes.map((b) => ({
     id: `box_${b.x}_${b.y}_${b.rot}`,
     type: "box",
     x: padX + (b.x - xMin) * sx,
@@ -1204,7 +1331,7 @@ function makeRouletteLayout({ worldW, worldH, slotH }) {
 }
 
 /** normalizeRotation helper. */
-function normalizeRotation(rot) {
+function normalizeRotation(rot: number): number {
   const r = Number(rot) || 0;
   // Heuristic: values with magnitude > 2*pi are degrees.
   if (Math.abs(r) > Math.PI * 2) return (r * Math.PI) / 180;
@@ -1212,7 +1339,7 @@ function normalizeRotation(rot) {
 }
 
 /** interpolateXAtY helper. */
-function interpolateXAtY(points, y) {
+function interpolateXAtY(points: Array<readonly [number, number]>, y: number): number {
   if (!points.length) return 0;
   if (y <= points[0][1]) return points[0][0];
   if (y >= points[points.length - 1][1]) return points[points.length - 1][0];
@@ -1228,8 +1355,8 @@ function interpolateXAtY(points, y) {
 }
 
 /** buildWallSegments helper. */
-function buildWallSegments(entities) {
-  const segs = [];
+function buildWallSegments(entities: FixedEntity[]): WallSegment[] {
+  const segs: WallSegment[] = [];
   for (const ent of entities || []) {
     if (!ent) continue;
     if (ent.type === "polyline" && Array.isArray(ent.points)) {
@@ -1248,7 +1375,7 @@ function buildWallSegments(entities) {
 }
 
 /** boxToSegments helper. */
-function boxToSegments(b) {
+function boxToSegments(b: Extract<FixedEntity, { type: "box" }>): WallSegment[] {
   const cx = b.x;
   const cy = b.y;
   const hw = b.w / 2;
@@ -1261,7 +1388,7 @@ function boxToSegments(b) {
     [hw, hh],
     [-hw, hh]
   ].map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
-  const segs = [];
+  const segs: WallSegment[] = [];
   for (let i = 0; i < 4; i++) {
     const a = pts[i];
     const d = pts[(i + 1) % 4];
@@ -1271,7 +1398,7 @@ function boxToSegments(b) {
 }
 
 /** makeSeg helper. */
-function makeSeg(x0, y0, x1, y1) {
+function makeSeg(x0: number, y0: number, x1: number, y1: number): WallSegment {
   const dx = x1 - x0;
   const dy = y1 - y0;
   const len2 = dx * dx + dy * dy;
@@ -1289,11 +1416,11 @@ function makeSeg(x0, y0, x1, y1) {
 }
 
 /** buildSegmentBins helper. */
-function buildSegmentBins(segments, binH) {
+function buildSegmentBins(segments: WallSegment[], binH: number): SegmentBins {
   let yMax = 0;
   for (const s of segments) yMax = Math.max(yMax, s.yMax);
   const n = Math.max(1, Math.ceil(yMax / binH) + 1);
-  const bins = Array.from({ length: n }, () => []);
+  const bins: number[][] = Array.from({ length: n }, () => []);
   for (let i = 0; i < segments.length; i++) {
     const s = segments[i];
     const a = clampInt(Math.floor(s.yMin / binH), 0, n - 1);
@@ -1304,24 +1431,28 @@ function buildSegmentBins(segments, binH) {
 }
 
 /** resolveWallSegments helper. */
-function resolveWallSegments(board, m, restitution, segments, bins) {
-  const candidates = [];
-  if (bins && bins.bins?.length) {
-    const h = bins.binH;
+function resolveWallSegments(
+  board: Board,
+  m: Marble,
+  restitution: number,
+  segments: WallSegment[],
+  bins: SegmentBins | null
+): void {
+  const candidates: number[] = [];
+  if (bins && bins.bins.length) {
+    const h = Number(bins.binH) || 260;
     const i0 = clampInt(Math.floor((m.y - m.r - 60) / h), 0, bins.bins.length - 1);
     const i1 = clampInt(Math.floor((m.y + m.r + 60) / h), 0, bins.bins.length - 1);
     for (let i = i0; i <= i1; i++) {
-      for (const idx of bins.bins[i]) candidates.push(idx);
+      for (const idx of bins.bins[i] || []) candidates.push(idx);
     }
   } else {
     for (let i = 0; i < segments.length; i++) candidates.push(i);
   }
 
-  // Avoid doing the same segment twice when bins overlap.
-  const uniq = candidates.length > 64 ? new Set(candidates) : null;
-  const it = uniq ? uniq.values() : candidates;
-
-  for (const idx of it) {
+  // Always dedupe to avoid resolving the same segment multiple times when bins overlap.
+  const uniq = new Set(candidates);
+  for (const idx of uniq.values()) {
     const s = segments[idx];
     if (m.y + m.r < s.yMin - 2 || m.y - m.r > s.yMax + 2) continue;
     resolveCircleSegment(m, s, restitution);
@@ -1332,12 +1463,15 @@ function resolveWallSegments(board, m, restitution, segments, bins) {
 }
 
 /** resolveCircleSegment helper. */
-function resolveCircleSegment(m, s, restitution) {
+function resolveCircleSegment(m: Marble, s: WallSegment, restitution: number): void {
   const px = m.x;
   const py = m.y;
-  const t = clamp(((px - s.x0) * s.dx + (py - s.y0) * s.dy) / s.len2, 0, 1);
-  const cx = s.x0 + s.dx * t;
-  const cy = s.y0 + s.dy * t;
+  const dx0 = s.dx || (s.x1 - s.x0);
+  const dy0 = s.dy || (s.y1 - s.y0);
+  const len2 = s.len2 || Math.max(1e-9, dx0 * dx0 + dy0 * dy0);
+  const t = clamp(((px - s.x0) * dx0 + (py - s.y0) * dy0) / len2, 0, 1);
+  const cx = s.x0 + dx0 * t;
+  const cy = s.y0 + dy0 * t;
   const dx = px - cx;
   const dy = py - cy;
   const d2 = dx * dx + dy * dy;
@@ -1369,9 +1503,9 @@ function resolveCircleSegment(m, s, restitution) {
 }
 
 /** resolvePropeller helper. */
-function resolvePropeller(state, m, p) {
+function resolvePropeller(state: GameState, m: Marble, p: Propeller): void {
   const t = state.t;
-  const ang = (p.phase || 0) + (p.omega || 0) * t;
+  const ang = (p.phase ?? 0) + (p.omega ?? 0) * t;
   const c = Math.cos(ang);
   const s = Math.sin(ang);
   const hx = (p.len / 2) * c;
@@ -1398,10 +1532,10 @@ function resolvePropeller(state, m, p) {
   // Kinematic surface velocity at contact point (omega cross r).
   const rx = cx - p.x;
   const ry = cy - p.y;
-  const omega = p.omega || 0;
+  const omega = p.omega ?? 0;
   let vSurfX = -omega * ry;
   let vSurfY = omega * rx;
-  const maxSurf = Number.isFinite(p.maxSurf) ? p.maxSurf : Infinity;
+  const maxSurf = typeof p.maxSurf === "number" && Number.isFinite(p.maxSurf) ? p.maxSurf : Infinity;
   if (Number.isFinite(maxSurf) && maxSurf > 0) {
     const vmag = Math.hypot(vSurfX, vSurfY);
     if (vmag > maxSurf) {
@@ -1416,7 +1550,7 @@ function resolvePropeller(state, m, p) {
   const rvy = m.vy - vSurfY;
   const vn = rvx * nx + rvy * ny;
   if (vn < 0) {
-    const bounce = Number.isFinite(p.bounce) ? p.bounce : 0.10; // propeller is more "paddly" than bouncy
+    const bounce = typeof p.bounce === "number" && Number.isFinite(p.bounce) ? p.bounce : 0.10; // propeller is more "paddly" than bouncy
     m.vx = rvx - (1 + bounce) * vn * nx + vSurfX;
     m.vy = rvy - (1 + bounce) * vn * ny + vSurfY;
   }
@@ -1425,21 +1559,21 @@ function resolvePropeller(state, m, p) {
   const tx = -ny;
   const ty = nx;
   const vt = (m.vx - vSurfX) * tx + (m.vy - vSurfY) * ty;
-  const mix = Number.isFinite(p.mix) ? p.mix : 8;
-  const down = Number.isFinite(p.down) ? p.down : 18;
+  const mix = typeof p.mix === "number" && Number.isFinite(p.mix) ? p.mix : 8;
+  const down = typeof p.down === "number" && Number.isFinite(p.down) ? p.down : 18;
   m.vx += tx * (mix * Math.sign(vt || 1));
   m.vy += ty * (mix * Math.sign(vt || 1));
   // Downward bias helps keep the simulation draining even with many marbles.
   m.vy += down;
   // Prevent propellers from launching marbles far upward (can cause top-side pileups).
-  const maxUp = Number.isFinite(p.maxUp) ? p.maxUp : 120; // px/s
+  const maxUp = typeof p.maxUp === "number" && Number.isFinite(p.maxUp) ? p.maxUp : 120; // px/s
   m.vy = Math.max(m.vy, -maxUp);
 
   state.stats.propellerContacts++;
 }
 
 /** resolveRotor helper. */
-function resolveRotor(state, m, r, restitution) {
+function resolveRotor(state: GameState, m: Marble, r: Rotor, restitution: number): void {
   const dx = m.x - r.x;
   const dy = m.y - r.y;
   const sumR = m.r + r.r;
@@ -1455,12 +1589,12 @@ function resolveRotor(state, m, r, restitution) {
   m.y += ny * push;
 
   // Rotor surface velocity at contact point (omega cross rVec).
-  const omega = r.omega || 0;
+  const omega = r.omega ?? 0;
   const rx = (r.r + 0.5) * nx;
   const ry = (r.r + 0.5) * ny;
   let vSurfX = -omega * ry;
   let vSurfY = omega * rx;
-  const maxSurf = Number.isFinite(r.maxSurf) ? r.maxSurf : Infinity;
+  const maxSurf = typeof r.maxSurf === "number" && Number.isFinite(r.maxSurf) ? r.maxSurf : Infinity;
   if (Number.isFinite(maxSurf) && maxSurf > 0) {
     const vmag = Math.hypot(vSurfX, vSurfY);
     if (vmag > maxSurf) {
@@ -1475,14 +1609,14 @@ function resolveRotor(state, m, r, restitution) {
   const rvy = m.vy - vSurfY;
   const vn = rvx * nx + rvy * ny;
   if (vn < 0) {
-    const bounce = Number.isFinite(r.bounce) ? r.bounce : restitution;
+    const bounce = typeof r.bounce === "number" && Number.isFinite(r.bounce) ? r.bounce : restitution;
     m.vx = rvx - (1 + bounce) * vn * nx + vSurfX;
     m.vy = rvy - (1 + bounce) * vn * ny + vSurfY;
   }
 
   // Extra "bumper" kick so rotors feel like pinball bumpers (stronger separation, more drama).
   // Applied along the collision normal after reflection.
-  const kick = Number.isFinite(r.kick) ? r.kick : 0;
+  const kick = typeof r.kick === "number" && Number.isFinite(r.kick) ? r.kick : 0;
   if (kick) {
     m.vx += nx * kick;
     m.vy += ny * kick;
@@ -1492,19 +1626,19 @@ function resolveRotor(state, m, r, restitution) {
   const tx = -ny;
   const ty = nx;
   const vt = (m.vx - vSurfX) * tx + (m.vy - vSurfY) * ty;
-  const dampT = Number.isFinite(r.dampT) ? r.dampT : 0.02;
+  const dampT = typeof r.dampT === "number" && Number.isFinite(r.dampT) ? r.dampT : 0.02;
   m.vx -= vt * tx * dampT;
   m.vy -= vt * ty * dampT;
 
   // Help the board keep draining.
-  const down = Number.isFinite(r.down) ? r.down : 0;
+  const down = typeof r.down === "number" && Number.isFinite(r.down) ? r.down : 0;
   if (down) m.vy += down;
-  const maxUp = Number.isFinite(r.maxUp) ? r.maxUp : Infinity;
+  const maxUp = typeof r.maxUp === "number" && Number.isFinite(r.maxUp) ? r.maxUp : Infinity;
   if (Number.isFinite(maxUp) && maxUp >= 0) m.vy = Math.max(m.vy, -maxUp);
 }
 
 /** hash01 helper. */
-function hash01(str) {
+function hash01(str: string): number {
   // FNV-1a 32-bit -> [0,1)
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {

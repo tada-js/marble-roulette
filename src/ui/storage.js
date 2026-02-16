@@ -1,10 +1,28 @@
 import { DEFAULT_BALLS } from "../game/assets.js";
 
-const KEY = "marble-roulette:balls:v1";
-const COUNTS_KEY = "marble-roulette:ball-counts:v1";
+const KEY = "degururu:balls:v1";
+const LEGACY_KEY = "marble-roulette:balls:v1";
+const COUNTS_KEY = "degururu:ball-counts:v1";
+const LEGACY_COUNTS_KEY = "marble-roulette:ball-counts:v1";
+
+function migrateIfNeeded() {
+  try {
+    if (!localStorage.getItem(KEY) && localStorage.getItem(LEGACY_KEY)) {
+      localStorage.setItem(KEY, String(localStorage.getItem(LEGACY_KEY)));
+      localStorage.removeItem(LEGACY_KEY);
+    }
+    if (!localStorage.getItem(COUNTS_KEY) && localStorage.getItem(LEGACY_COUNTS_KEY)) {
+      localStorage.setItem(COUNTS_KEY, String(localStorage.getItem(LEGACY_COUNTS_KEY)));
+      localStorage.removeItem(LEGACY_COUNTS_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export function loadBallsCatalog() {
   try {
+    migrateIfNeeded();
     const raw = localStorage.getItem(KEY);
     if (!raw) return structuredClone(DEFAULT_BALLS);
     const parsed = JSON.parse(raw);
@@ -41,6 +59,7 @@ export function loadBallCounts(ballsCatalog) {
   const counts = {};
   for (const b of ballsCatalog) counts[b.id] = 1;
   try {
+    migrateIfNeeded();
     const raw = localStorage.getItem(COUNTS_KEY);
     if (!raw) return counts;
     const parsed = JSON.parse(raw);

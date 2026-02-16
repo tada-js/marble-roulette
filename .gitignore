@@ -1,4 +1,8 @@
 node_modules/
 output/
+.next/
+.vercel/
 .DS_Store
-
+tsconfig.tsbuildinfo
+.eslintcache
+.env*.local

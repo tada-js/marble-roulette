@@ -1,12 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeBoard, makeGameState, startGame, setDropX, dropAll, setBallCount, step } from "../src/game/engine.js";
+
+import { dropAll, makeBoard, makeGameState, setBallCount, setDropX, startGame, step } from "../src/game/engine";
 
 test("dropAll releases all marbles and winner is the last finisher", () => {
   const board = makeBoard({ slotCount: 8, heightMultiplier: 1, corridorEnabled: false });
-  const ballsCatalog = [
-    { id: "dog", name: "강아지", imageDataUrl: "data:image/svg+xml;utf8,<svg/>", tint: "#fff" }
-  ];
+  const ballsCatalog = [{ id: "dog", name: "강아지", imageDataUrl: "data:image/svg+xml;utf8,<svg/>", tint: "#fff" }];
   const state = makeGameState({ seed: 42, board, ballsCatalog });
   setBallCount(state, "dog", 5);
   startGame(state);
@@ -22,14 +21,18 @@ test("dropAll releases all marbles and winner is the last finisher", () => {
   for (let i = 0; i < 60 * 60 && state.finished.length < state.totalToDrop; i++) step(state, 1 / 60);
   assert.equal(state.finished.length, 5);
   assert.ok(state.winner);
-  assert.equal(state.winner.t, Math.max(...state.finished.map((x) => x.t)));
+  assert.equal(state.winner.t, Math.max(...state.finished.map((x: any) => x.t)));
 });
 
 test("zigzag layout reduces straight falls (lateral motion) and propeller mixes", () => {
-  const board = makeBoard({ layout: "zigzag", slotCount: 8, heightMultiplier: 1, corridorEnabled: false, elementScale: 0.85 });
-  const ballsCatalog = [
-    { id: "dog", name: "강아지", imageDataUrl: "data:image/svg+xml;utf8,<svg/>", tint: "#fff" }
-  ];
+  const board = makeBoard({
+    layout: "zigzag",
+    slotCount: 8,
+    heightMultiplier: 1,
+    corridorEnabled: false,
+    elementScale: 0.85,
+  });
+  const ballsCatalog = [{ id: "dog", name: "강아지", imageDataUrl: "data:image/svg+xml;utf8,<svg/>", tint: "#fff" }];
   const state = makeGameState({ seed: 7, board, ballsCatalog });
 
   setBallCount(state, "dog", 12);
@@ -55,5 +58,5 @@ test("zigzag layout reduces straight falls (lateral motion) and propeller mixes"
   assert.equal(state.finished.length, state.totalToDrop);
   assert.ok(state.stats.propellerContacts > 0, "expected at least one propeller contact");
   assert.ok(maxDev > board.worldW * 0.12, `expected lateral deviation; got ${maxDev.toFixed(1)}px`);
-  assert.ok(maxX - minX > board.worldW * 0.20, `expected horizontal spread; got ${(maxX - minX).toFixed(1)}px`);
+  assert.ok(maxX - minX > board.worldW * 0.2, `expected horizontal spread; got ${(maxX - minX).toFixed(1)}px`);
 });

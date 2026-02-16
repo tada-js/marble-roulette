@@ -1,12 +1,32 @@
+import type { BallCatalogEntry, Board, GameState } from "./types";
+
+export interface ViewState {
+  scale: number;
+  cameraY: number;
+  viewHWorld: number;
+  cameraOverrideY: number | null;
+}
+
+export interface Renderer {
+  ctx: CanvasRenderingContext2D;
+  resizeToFit: () => void;
+  draw: (state: GameState, ballsCatalog: BallCatalogEntry[], imagesById: Map<string, HTMLImageElement>) => void;
+  screenToWorld: (x: number, y: number) => { x: number; y: number };
+  worldToScreen: (x: number, y: number) => { x: number; y: number };
+  getViewState: () => ViewState;
+  setCameraOverrideY: (y: number | null) => void;
+  clearCameraOverride: () => void;
+}
+
 /** makeRenderer helper. */
-export function makeRenderer(canvas, { board }) {
-  const ctx = canvas.getContext("2d", { alpha: false });
-  if (!ctx) throw new Error("2D context not available");
+export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Board }): Renderer {
+  const ctx0 = canvas.getContext("2d", { alpha: false });
+  if (!ctx0) throw new Error("2D context not available");
+  const ctx: CanvasRenderingContext2D = ctx0;
 
   const dpr = () => Math.max(1, Math.min(2, window.devicePixelRatio || 1));
   const bootMs = performance.now();
-  /** hashStr helper. */
-  const hashStr = (s) => {
+  const hashStr = (s: unknown): number => {
     // Small deterministic hash for stable per-entity color offsets.
     let h = 2166136261 >>> 0;
     const str = String(s || "");
@@ -22,21 +42,21 @@ export function makeRenderer(canvas, { board }) {
     oy: 0,
     cameraY: 0,
     viewHWorld: board.worldH,
-    cameraOverrideY: null
+    cameraOverrideY: null as number | null
   };
 
   const bgCache = {
-    base: null,
-    baseCtx: null,
+    base: null as HTMLCanvasElement | null,
+    baseCtx: null as CanvasRenderingContext2D | null,
     w: 0,
     h: 0,
-    stripePattern: null,
-    gridPattern: null,
+    stripePattern: null as CanvasPattern | null,
+    gridPattern: null as CanvasPattern | null,
     patternSeed: 0,
   };
 
   /** resizeToFit helper. */
-  function resizeToFit() {
+  function resizeToFit(): void {
     const cssW = canvas.clientWidth || canvas.parentElement?.clientWidth || board.worldW;
     const cssH = canvas.clientHeight || canvas.parentElement?.clientHeight || board.worldH;
     // For tall boards, fit width and use a scrolling camera for Y.
@@ -53,16 +73,16 @@ export function makeRenderer(canvas, { board }) {
   }
 
   /** worldToScreen helper. */
-  function worldToScreen(x, y) {
+  function worldToScreen(x: number, y: number): { x: number; y: number } {
     return { x: view.ox + x * view.scale, y: view.oy + (y - view.cameraY) * view.scale };
   }
   /** screenToWorld helper. */
-  function screenToWorld(x, y) {
+  function screenToWorld(x: number, y: number): { x: number; y: number } {
     return { x: (x - view.ox) / view.scale, y: (y - view.oy) / view.scale + view.cameraY };
   }
 
   /** makeCanvas helper. */
-  function makeCanvas(w, h) {
+  function makeCanvas(w: number, h: number): HTMLCanvasElement {
     const c = document.createElement("canvas");
     c.width = Math.max(1, w | 0);
     c.height = Math.max(1, h | 0);
@@ -70,7 +90,7 @@ export function makeRenderer(canvas, { board }) {
   }
 
   /** ensureBgCache helper. */
-  function ensureBgCache(cssW, cssH) {
+  function ensureBgCache(cssW: number, cssH: number): void {
     if (!bgCache.base || bgCache.w !== cssW || bgCache.h !== cssH) {
       bgCache.w = cssW | 0;
       bgCache.h = cssH | 0;
@@ -175,7 +195,7 @@ export function makeRenderer(canvas, { board }) {
   }
 
   /** drawBoardBase helper. */
-  function drawBoardBase(tSec = 0) {
+  function drawBoardBase(tSec = 0): void {
     // Use real time so the background animates even when the simulation is paused (menu, dialogs, etc).
     const rt = (performance.now() - bootMs) / 1000;
     const tt = (Number.isFinite(tSec) ? tSec : 0) + rt * 0.85;
@@ -229,7 +249,7 @@ export function makeRenderer(canvas, { board }) {
   }
 
   /** draw helper. */
-  function draw(state, ballsCatalog, imagesById) {
+  function draw(state: GameState, ballsCatalog: BallCatalogEntry[], imagesById: Map<string, HTMLImageElement>): void {
     drawBoardBase(state?.t || 0);
 
     // Shared FX time for hue cycling (keeps animating even when game is paused).
@@ -525,8 +545,10 @@ export function makeRenderer(canvas, { board }) {
 
     // Marbles (pending + active).
     for (const m of [...(state.pending || []), ...state.marbles]) {
-      // Hide finished marbles to avoid clutter when 100+ arrive.
-      if (m.done) continue;
+      const showFinishedBadge = board.slotCount === 1 && m.done && !!m.result?.label;
+      // Hide finished marbles to avoid clutter when 100+ arrive,
+      // but keep single-slot arrival-order badges visible.
+      if (m.done && !showFinishedBadge) continue;
       const meta = ballsCatalog.find((b) => b.id === m.ballId);
       const img = imagesById.get(m.ballId);
       const r = m.r;
@@ -562,7 +584,7 @@ export function makeRenderer(canvas, { board }) {
       ctx.restore();
 
       // Arrival order badge for the single-slot mode.
-      if (board.slotCount === 1 && m.done && m.result?.label) {
+      if (showFinishedBadge && m.result?.label) {
         const txt = String(m.result.label);
         const fontSize = Math.max(11, Math.min(18, r * 0.95));
         ctx.font = `800 ${fontSize}px ui-monospace, Menlo, monospace`;
@@ -601,13 +623,13 @@ export function makeRenderer(canvas, { board }) {
     draw,
     screenToWorld,
     worldToScreen,
-    getViewState: () => ({
+    getViewState: (): ViewState => ({
       scale: view.scale,
       cameraY: view.cameraY,
       viewHWorld: view.viewHWorld,
       cameraOverrideY: view.cameraOverrideY
     }),
-    setCameraOverrideY: (y) => {
+    setCameraOverrideY: (y: number | null) => {
       view.cameraOverrideY = typeof y === "number" && Number.isFinite(y) ? y : null;
     },
     clearCameraOverride: () => {
@@ -617,7 +639,7 @@ export function makeRenderer(canvas, { board }) {
 }
 
 /** roundRect helper. */
-function roundRect(ctx, x, y, w, h, r) {
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
   ctx.beginPath();
   ctx.moveTo(x + rr, y);
@@ -629,16 +651,16 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 /** clamp helper. */
-function clamp(v, a, b) {
+function clamp(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v));
 }
 /** clampInt helper. */
-function clampInt(v, a, b) {
+function clampInt(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v | 0));
 }
 
 /** corridorAt helper. */
-function corridorAt(board, y) {
+function corridorAt(board: Board, y: number): { left: number; right: number } {
   const c = board.corridor;
   if (!c) return { left: 0, right: board.worldW };
   const cx = c.worldW / 2;
@@ -649,12 +671,12 @@ function corridorAt(board, y) {
 }
 
 /** smoothstep helper. */
-function smoothstep(x) {
+function smoothstep(x: number): number {
   const t = clamp(x, 0, 1);
   return t * t * (3 - 2 * t);
 }
 
 /** lerp helper. */
-function lerp(a, b, t) {
+function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }

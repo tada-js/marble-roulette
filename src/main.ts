@@ -10,26 +10,50 @@ import {
   getBallCount,
   getTotalSelectedCount,
   setBallCount
-} from "./game/engine.js";
-import { makeRenderer } from "./game/render.js";
+} from "./game/engine";
+import { makeRenderer } from "./game/render";
 import { loadBallsCatalog, loadBallCounts, saveBallsCatalog, saveBallCounts } from "./ui/storage.js";
 import { mountSettingsDialog } from "./ui/settings.js";
+import type { BallCatalogEntry, GameState } from "./game/types";
+import type { TextSnapshot } from "./game/engine";
 
-const canvas = document.getElementById("game");
-const startBtn = document.getElementById("start-btn");
-const resetBtn = document.getElementById("reset-btn");
-const settingsBtn = document.getElementById("settings-btn");
-const bgmBtn = document.getElementById("bgm-btn");
-const winnerBtn = document.getElementById("winner-btn");
-const ballsEl = document.getElementById("balls");
-const resultEl = document.getElementById("result");
-const hintEl = document.getElementById("hint");
-const minimap = document.getElementById("minimap");
-const viewLockEl = document.getElementById("view-lock");
-const minimapHintEl = document.getElementById("minimap-hint");
-const canvasCoordReadoutEl = document.getElementById("canvas-coord-readout");
-const canvasCoordCopyBtn = document.getElementById("canvas-coord-copy");
-const minimapTitleEl = document.getElementById("minimap-title");
+type FracCoord = { xFrac: number; yFrac: number };
+
+type UiRuntimeState = {
+  _shownResultId: string | null;
+  _shownWinnerT: number | null;
+};
+
+type UiGameState = GameState & UiRuntimeState;
+
+type WinnerPayload = {
+  name: string;
+  img: string;
+  order: number;
+  total: number;
+};
+
+function mustGetEl<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`Missing element: #${id}`);
+  return el as T;
+}
+
+const canvas = mustGetEl<HTMLCanvasElement>("game");
+const startBtn = mustGetEl<HTMLButtonElement>("start-btn");
+const resetBtn = mustGetEl<HTMLButtonElement>("reset-btn");
+const settingsBtn = mustGetEl<HTMLButtonElement>("settings-btn");
+const bgmBtn = mustGetEl<HTMLButtonElement>("bgm-btn");
+const winnerBtn = mustGetEl<HTMLButtonElement>("winner-btn");
+const ballsEl = mustGetEl<HTMLDivElement>("balls");
+const resultEl = mustGetEl<HTMLDivElement>("result");
+const hintEl = mustGetEl<HTMLDivElement>("hint");
+const minimap = mustGetEl<HTMLCanvasElement>("minimap");
+const viewLockEl = mustGetEl<HTMLInputElement>("view-lock");
+const minimapHintEl = mustGetEl<HTMLDivElement>("minimap-hint");
+const canvasCoordReadoutEl = mustGetEl<HTMLDivElement>("canvas-coord-readout");
+const canvasCoordCopyBtn = mustGetEl<HTMLButtonElement>("canvas-coord-copy");
+const minimapTitleEl = mustGetEl<HTMLDivElement>("minimap-title");
 
 /** syncVisualViewportHeight helper. */
 function syncVisualViewportHeight() {
@@ -39,21 +63,21 @@ function syncVisualViewportHeight() {
   document.documentElement.style.setProperty("--appH", `${Math.round(h)}px`);
 }
 
-const settingsDialog = document.getElementById("settings-dialog");
-const settingsList = document.getElementById("settings-list");
-const restoreDefaultsBtn = document.getElementById("restore-defaults");
-const addBallBtn = document.getElementById("add-ball");
+const settingsDialog = mustGetEl<HTMLDialogElement>("settings-dialog");
+const settingsList = mustGetEl<HTMLDivElement>("settings-list");
+const restoreDefaultsBtn = mustGetEl<HTMLButtonElement>("restore-defaults");
+const addBallBtn = mustGetEl<HTMLButtonElement>("add-ball");
 
-const winnerDialog = document.getElementById("winner-dialog");
-const winnerImgEl = document.getElementById("winner-img");
-const winnerTitleEl = document.getElementById("winner-title");
-const winnerSubEl = document.getElementById("winner-sub");
-const winnerNameEl = document.getElementById("winner-name");
-const winnerOrderEl = document.getElementById("winner-order");
+const winnerDialog = mustGetEl<HTMLDialogElement>("winner-dialog");
+const winnerImgEl = mustGetEl<HTMLImageElement>("winner-img");
+const winnerTitleEl = mustGetEl<HTMLDivElement>("winner-title");
+const winnerSubEl = mustGetEl<HTMLDivElement>("winner-sub");
+const winnerNameEl = mustGetEl<HTMLDivElement>("winner-name");
+const winnerOrderEl = mustGetEl<HTMLDivElement>("winner-order");
 
 // Hand-tuned extra rotors can be added here (world coords or xFrac/yFrac in [0..1]).
 // These override the auto-added mid-section rotors (the early rotor ring stays).
-const customRotors = [
+const customRotors: Array<{ xFrac: number; yFrac: number; omega: number }> = [
   { xFrac: 0.220, yFrac: 0.629, omega: 11.2 },
   { xFrac: 0.342, yFrac: 0.629, omega: -11.2 },
   { xFrac: 0.140, yFrac: 0.722, omega: 11.8 },
@@ -86,33 +110,35 @@ const customRotors = [
 
 // Single finish slot: marbles pile in arrival order. (No per-slot outcomes.)
 const board = makeBoard({ layout: "zigzag", slotCount: 1, heightMultiplier: 10, elementScale: 0.85, customRotors });
-let ballsCatalog = loadBallsCatalog();
+let ballsCatalog = loadBallsCatalog() as BallCatalogEntry[];
 saveBallsCatalog(ballsCatalog);
 
-const state = makeGameState({ seed: 1337, board, ballsCatalog });
-state.counts = loadBallCounts(ballsCatalog);
+const state = makeGameState({ seed: 1337, board, ballsCatalog }) as UiGameState;
+state._shownResultId = null;
+state._shownWinnerT = null;
+state.counts = (loadBallCounts(ballsCatalog) as Record<string, number>) ?? {};
 const renderer = makeRenderer(canvas, { board });
-const minimapCtx = minimap?.getContext?.("2d");
+const minimapCtx: CanvasRenderingContext2D | null = minimap.getContext("2d");
 
-let lastCanvasFrac = null; // {xFrac,yFrac}
-let pinnedCanvasFrac = null; // {xFrac,yFrac}
+let lastCanvasFrac: FracCoord | null = null;
+let pinnedCanvasFrac: FracCoord | null = null;
 let coordMode = false;
 
 // View mode:
 // - OFF (unchecked): free view (minimap sets a manual camera override)
 // - ON  (checked): tail focus (auto-follow the straggler)
-let tailFocusOn = true;
+let tailFocusOn = false;
 
-let lastWinner = null;
+let lastWinner: WinnerPayload | null = null;
 /** setWinnerCache helper. */
-function setWinnerCache(payload) {
+function setWinnerCache(payload: WinnerPayload | null): void {
   lastWinner = payload || null;
-  if (winnerBtn) winnerBtn.disabled = !lastWinner;
+  winnerBtn.disabled = !lastWinner;
 }
 
-const imagesById = new Map();
+const imagesById = new Map<string, HTMLImageElement>();
 /** refreshImages helper. */
-function refreshImages() {
+function refreshImages(): void {
   imagesById.clear();
   for (const b of ballsCatalog) {
     const img = new Image();
@@ -123,11 +149,11 @@ function refreshImages() {
 refreshImages();
 
 /** setBalls helper. */
-function setBalls(next) {
+function setBalls(next: BallCatalogEntry[]): void {
   ballsCatalog = next;
   state.ballsCatalog = next;
   // Keep counts aligned with catalog.
-  const nextCounts = {};
+  const nextCounts: Record<string, number> = {};
   for (const b of next) nextCounts[b.id] = state.counts?.[b.id] ?? 1;
   state.counts = nextCounts;
   saveBallCounts(state.counts);
@@ -141,10 +167,10 @@ const settings = mountSettingsDialog(
   restoreDefaultsBtn,
   () => ballsCatalog,
   setBalls
-);
+) as { open: () => void; render: () => void };
 
 /** makeNewBall helper. */
-function makeNewBall() {
+function makeNewBall(): BallCatalogEntry {
   const h = Math.floor(Math.random() * 360);
   const bg0 = `hsl(${h}, 95%, 58%)`;
   const bg1 = `hsl(${(h + 60) % 360}, 95%, 52%)`;
@@ -177,12 +203,12 @@ function makeNewBall() {
   };
 }
 
-addBallBtn?.addEventListener("click", () => {
+addBallBtn.addEventListener("click", () => {
   if (state.mode === "playing") return;
   const next = [...ballsCatalog, makeNewBall()];
   saveBallsCatalog(next);
   setBalls(next);
-  settings.render?.();
+  settings.render();
 });
 
 /** renderBallCards helper. */
@@ -235,8 +261,7 @@ function renderBallCards() {
     plus.type = "button";
     plus.textContent = "+";
 
-    /** applyDelta helper. */
-    const applyDelta = (d) => {
+    const applyDelta = (d: number): void => {
       if (state.mode === "playing") return;
       const next = getBallCount(state, b.id) + d;
       setBallCount(state, b.id, next);
@@ -277,11 +302,8 @@ renderBallCards();
 function updateControls() {
   const total = getTotalSelectedCount(state);
   startBtn.disabled = state.mode === "playing";
-  if (viewLockEl) {
-    const v = renderer.getViewState?.();
-    viewLockEl.disabled = !(state.mode === "playing" && state.released && v);
-    viewLockEl.checked = !!tailFocusOn;
-  }
+  viewLockEl.disabled = !(state.mode === "playing" && state.released);
+  viewLockEl.checked = !!tailFocusOn;
   hintEl.textContent =
     state.mode === "playing"
       ? state.released
@@ -291,12 +313,12 @@ function updateControls() {
 }
 
 /** setResultText helper. */
-function setResultText(msg) {
+function setResultText(msg: string): void {
   resultEl.textContent = msg || "";
 }
 
 /** updateCanvasCoordReadout helper. */
-function updateCanvasCoordReadout(xFrac, yFrac) {
+function updateCanvasCoordReadout(xFrac: number, yFrac: number): void {
   if (!coordMode) return;
   lastCanvasFrac =
     Number.isFinite(xFrac) && Number.isFinite(yFrac) ? { xFrac: clamp01(xFrac), yFrac: clamp01(yFrac) } : null;
@@ -310,11 +332,11 @@ function updateCanvasCoordReadout(xFrac, yFrac) {
 }
 
 /** clamp01 helper. */
-function clamp01(v) {
+function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
-async function copyText(s) {
+async function copyText(s: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(s);
@@ -368,29 +390,31 @@ function playFanfare() {
 }
 
 // Simple chiptune-ish BGM (original pattern; "8-bit vibe" without copying any specific tune).
-let bgm = {
+const bgm = {
   on: false,
-  ctx: null,
-  gain: null,
-  timer: null,
+  ctx: null as AudioContext | null,
+  gain: null as GainNode | null,
+  timer: null as number | null,
   loopSec: 0,
   nextT: 0,
 };
 
 /** midiToHz helper. */
-function midiToHz(n) {
+function midiToHz(n: number): number {
   return 440 * Math.pow(2, (n - 69) / 12);
 }
 
 /** bgmStop helper. */
-function bgmStop() {
+function bgmStop(): void {
   if (bgm.timer) {
     clearInterval(bgm.timer);
     bgm.timer = null;
   }
   bgm.nextT = 0;
   if (bgm.gain) {
-    try { bgm.gain.gain.setValueAtTime(0.0, bgm.ctx.currentTime); } catch {}
+    try {
+      if (bgm.ctx) bgm.gain.gain.setValueAtTime(0.0, bgm.ctx.currentTime);
+    } catch {}
   }
   if (bgm.ctx) {
     bgm.ctx.close().catch(() => {});
@@ -401,12 +425,12 @@ function bgmStop() {
 }
 
 /** bgmStart helper. */
-function bgmStart() {
+function bgmStart(): void {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
 
   bgmStop();
-  const ctx = new AC();
+  const ctx = new AC() as AudioContext;
   const gain = ctx.createGain();
   gain.gain.value = 0.0;
   gain.connect(ctx.destination);
@@ -441,7 +465,7 @@ function bgmStart() {
   ];
 
   /** playTone helper. */
-  function playTone(type, hz, start, dur, vol) {
+  function playTone(type: OscillatorType, hz: number, start: number, dur: number, vol: number): void {
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = type;
@@ -456,7 +480,7 @@ function bgmStart() {
   }
 
   /** schedule helper. */
-  function schedule(fromT, horizonSec) {
+  function schedule(fromT: number, horizonSec: number): void {
     const endT = fromT + horizonSec;
     let t = bgm.nextT;
     while (t < endT) {
@@ -475,7 +499,7 @@ function bgmStart() {
 
   // Schedule ahead in small chunks.
   schedule(ctx.currentTime, 0.8);
-  bgm.timer = setInterval(() => {
+  bgm.timer = window.setInterval(() => {
     if (!bgm.ctx) return;
     const now = bgm.ctx.currentTime;
     schedule(now, 0.9);
@@ -483,7 +507,7 @@ function bgmStart() {
 }
 
 /** setBgmOn helper. */
-function setBgmOn(on) {
+function setBgmOn(on: boolean): void {
   bgm.on = !!on;
   try { localStorage.setItem("bgmOn", bgm.on ? "1" : "0"); } catch {}
   if (bgmBtn) {
@@ -495,16 +519,15 @@ function setBgmOn(on) {
 }
 
 /** getWinnerPayloadFromState helper. */
-function getWinnerPayloadFromState() {
-  if (!state?.winner) return null;
-  const b = ballsCatalog.find((x) => x.id === state.winner?.ballId);
-  const name = b?.name || state.winner?.ballId || "알 수 없는 공";
-  return {
-    name,
-    img: b?.imageDataUrl || "",
-    order: "",
-    total: 0
-  };
+function getWinnerPayloadFromState(): WinnerPayload | null {
+  if (!state.winner) return null;
+  const w = state.winner;
+  const b = ballsCatalog.find((x) => x.id === w.ballId);
+  const name = b?.name ?? w.ballId ?? "알 수 없는 공";
+  const img = b?.imageDataUrl ?? "";
+  let orderIdx = state.finished.findIndex((x) => x.marbleId === w.marbleId && x.ballId === w.ballId && x.t === w.t);
+  if (orderIdx < 0) orderIdx = Math.max(0, state.finished.length - 1);
+  return { name, img, order: orderIdx + 1, total: state.totalToDrop };
 }
 
 /** showWinnerModal helper. */
@@ -520,7 +543,7 @@ function showWinnerModal() {
   if (winnerTitleEl) winnerTitleEl.textContent = "마지막 공이 도착했습니다";
   if (winnerSubEl) winnerSubEl.textContent = "";
   if (winnerNameEl) winnerNameEl.textContent = payload.name;
-  if (winnerOrderEl) winnerOrderEl.textContent = payload.order ? `${payload.order}${payload.total ? ` / ${payload.total}` : ""}` : "";
+  if (winnerOrderEl) winnerOrderEl.textContent = payload.total ? `${payload.order} / ${payload.total}` : String(payload.order);
 
   playFanfare();
   try {
@@ -546,10 +569,11 @@ function tryStart() {
   setResultText("");
   renderBallCards(); // disable +/- while playing
   updateControls();
+  fixedAccumulatorSec = 0;
   // Default to tail focus when a run starts.
   tailFocusOn = true;
-  renderer.clearCameraOverride?.();
-  if (viewLockEl) viewLockEl.checked = true;
+  renderer.clearCameraOverride();
+  viewLockEl.checked = true;
   setWinnerCache(null);
   // Start implies drop: release all marbles immediately.
   const n = dropAll(state);
@@ -565,11 +589,12 @@ resetBtn.addEventListener("click", () => {
   resetGame(state);
   state._shownResultId = null;
   state._shownWinnerT = null;
+  fixedAccumulatorSec = 0;
   setResultText("");
   renderBallCards();
-  renderer.clearCameraOverride?.();
+  renderer.clearCameraOverride();
   tailFocusOn = true;
-  if (viewLockEl) viewLockEl.checked = true;
+  viewLockEl.checked = true;
   setWinnerCache(null);
   updateControls();
 });
@@ -578,23 +603,24 @@ settingsBtn.addEventListener("click", () => {
   settings.open();
 });
 
-bgmBtn?.addEventListener("click", async () => {
+bgmBtn.addEventListener("click", async () => {
   // Ensure this runs under a user gesture so AudioContext can start.
   setBgmOn(!bgm.on);
 });
 
-winnerBtn?.addEventListener("click", () => {
+winnerBtn.addEventListener("click", () => {
   showWinnerModal();
 });
 
 // Drop position selection via clicking the board was removed (always uses the default spawn x).
 
 // Fullscreen toggle per skill guidance.
-document.addEventListener("keydown", async (e) => {
-  const tag = e.target?.tagName;
+document.addEventListener("keydown", async (e: KeyboardEvent) => {
+  const target = e.target as HTMLElement | null;
+  const tag = target?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-  const k = e.key?.toLowerCase?.() || "";
+  const k = (e.key || "").toLowerCase();
 
   // Fullscreen.
   if (k === "f") {
@@ -615,10 +641,15 @@ document.addEventListener("keydown", async (e) => {
   }
 });
 
+let fixedAccumulatorSec = 0;
+
 /** tickFixed helper. */
-function tickFixed(ms) {
+function tickFixed(ms: number): void {
   const dt = 1 / 60;
-  const steps = Math.max(1, Math.round((ms / 1000) / dt));
+  const sec = Math.max(0, ms / 1000);
+  const total = fixedAccumulatorSec + sec;
+  const steps = Math.floor(total / dt);
+  fixedAccumulatorSec = total - steps * dt;
   for (let i = 0; i < steps; i++) step(state, dt);
   renderer.draw(state, ballsCatalog, imagesById);
   onAfterFrame();
@@ -641,17 +672,20 @@ function onAfterFrame() {
 // Skill integration points: deterministic stepping + text state.
 window.render_game_to_text = () => {
   const base = snapshotForText(state);
-  const v = renderer.getViewState?.();
-  if (v) base.camera = { cameraY: v.cameraY, viewHWorld: v.viewHWorld, override: v.cameraOverrideY };
-  return JSON.stringify(base);
+  const v = renderer.getViewState();
+  const out: TextSnapshot & { camera: { cameraY: number; viewHWorld: number; override: number | null } } = {
+    ...base,
+    camera: { cameraY: v.cameraY, viewHWorld: v.viewHWorld, override: v.cameraOverrideY }
+  };
+  return JSON.stringify(out);
 };
-window.advanceTime = async (ms) => {
+window.advanceTime = async (ms: number): Promise<void> => {
   tickFixed(ms);
 };
 
 let _resizeRaf = 0;
 /** scheduleResize helper. */
-function scheduleResize() {
+function scheduleResize(): void {
   if (_resizeRaf) return;
   _resizeRaf = requestAnimationFrame(() => {
     _resizeRaf = 0;
@@ -670,7 +704,7 @@ scheduleResize();
 // Animation loop for interactive play. `advanceTime()` overrides are for automation.
 let last = performance.now();
 /** raf helper. */
-function raf(now) {
+function raf(now: number): void {
   const dtMs = Math.min(40, now - last);
   last = now;
   if (state.mode === "playing") tickFixed(dtMs);
@@ -680,13 +714,13 @@ function raf(now) {
 requestAnimationFrame(raf);
 
 /** drawMinimap helper. */
-function drawMinimap() {
-  if (!minimapCtx || !minimap) return;
+function drawMinimap(): void {
+  if (!minimapCtx) return;
   const w = minimap.width;
   const h = minimap.height;
   minimapCtx.clearRect(0, 0, w, h);
 
-  const v = renderer.getViewState?.();
+  const v = renderer.getViewState();
   const camY = v?.cameraY ?? 0;
   const viewH = v?.viewHWorld ?? board.worldH;
   const worldH = board.worldH;
@@ -749,27 +783,27 @@ function drawMinimap() {
     if (state.mode !== "playing") minimapHintEl.textContent = "시작 전에도 미니맵으로 맵을 둘러볼 수 있어요.";
     else
       minimapHintEl.textContent =
-        "토글 OFF: 자유 시점(미니맵으로 이동). 토글 ON: 후미 공 자동 추적.";
+        "토글 OFF: 자유 시점(미니맵으로 이동)\n토글 ON: 후미 공 자동 추적";
   }
 }
 
 /** clamp helper. */
-function clamp(v, a, b) {
+function clamp(v: number, a: number, b: number): number {
   return Math.max(a, Math.min(b, v));
 }
 
-if (minimap) {
+{
   /** onPick helper. */
-  const onPick = (e) => {
+  const onPick = (e: PointerEvent) => {
     // Free view mode only. If the user interacts with the minimap, switch to free view.
     tailFocusOn = false;
-    if (viewLockEl) viewLockEl.checked = false;
+    viewLockEl.checked = false;
     const rect = minimap.getBoundingClientRect();
     const y = (e.clientY - rect.top) / rect.height;
-    const v = renderer.getViewState?.();
-    const viewH = v?.viewHWorld ?? board.worldH;
+    const v = renderer.getViewState();
+    const viewH = v.viewHWorld;
     const desired = y * board.worldH - viewH * 0.5;
-    renderer.setCameraOverrideY?.(desired);
+    renderer.setCameraOverrideY(desired);
     updateControls();
   };
   minimap.addEventListener("pointerdown", onPick);
@@ -779,7 +813,7 @@ if (minimap) {
   });
 }
 
-canvas?.addEventListener("pointermove", (e) => {
+canvas.addEventListener("pointermove", (e: PointerEvent) => {
   if (!coordMode) return;
   if (pinnedCanvasFrac) return;
   const rect = canvas.getBoundingClientRect();
@@ -791,12 +825,12 @@ canvas?.addEventListener("pointermove", (e) => {
   const yFrac = w.y / board.worldH;
   updateCanvasCoordReadout(xFrac, yFrac);
 });
-canvas?.addEventListener("pointerleave", () => {
+canvas.addEventListener("pointerleave", () => {
   if (!coordMode) return;
   if (!pinnedCanvasFrac) updateCanvasCoordReadout(NaN, NaN);
 });
 
-canvas?.addEventListener("pointerdown", (e) => {
+canvas.addEventListener("pointerdown", (e: PointerEvent) => {
   if (!coordMode) return;
   // Pin coordinate on click.
   const rect = canvas.getBoundingClientRect();
@@ -808,19 +842,17 @@ canvas?.addEventListener("pointerdown", (e) => {
   updateCanvasCoordReadout(pinnedCanvasFrac.xFrac, pinnedCanvasFrac.yFrac);
 });
 
-canvasCoordCopyBtn?.addEventListener("click", async () => {
+canvasCoordCopyBtn.addEventListener("click", async () => {
   if (!coordMode) return;
   const v = pinnedCanvasFrac || lastCanvasFrac;
   if (!v) return;
   const txt = `{ xFrac: ${v.xFrac.toFixed(3)}, yFrac: ${v.yFrac.toFixed(3)} }`;
   const ok = await copyText(txt);
-  if (canvasCoordCopyBtn) {
-    const prev = canvasCoordCopyBtn.textContent;
-    canvasCoordCopyBtn.textContent = ok ? "복사됨" : "실패";
-    setTimeout(() => {
-      if (canvasCoordCopyBtn) canvasCoordCopyBtn.textContent = prev;
-    }, 650);
-  }
+  const prev = canvasCoordCopyBtn.textContent;
+  canvasCoordCopyBtn.textContent = ok ? "복사됨" : "실패";
+  setTimeout(() => {
+    canvasCoordCopyBtn.textContent = prev;
+  }, 650);
 });
 
 document.addEventListener("keydown", (e) => {
@@ -831,7 +863,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 /** setCoordMode helper. */
-function setCoordMode(on) {
+function setCoordMode(on: boolean): void {
   coordMode = !!on;
   document.documentElement.classList.toggle("coord-mode", coordMode);
   pinnedCanvasFrac = null;
@@ -843,7 +875,7 @@ function setCoordMode(on) {
 }
 
 // Secret toggle: click "미니맵" title 5 times in a row.
-if (minimapTitleEl) {
+{
   let clicks = 0;
   let lastClickMs = 0;
   minimapTitleEl.addEventListener("click", () => {
@@ -861,15 +893,14 @@ if (minimapTitleEl) {
 // Default: hidden.
 setCoordMode(false);
 
-viewLockEl?.addEventListener("change", () => {
-  const v = renderer.getViewState?.();
-  if (!v) return;
+viewLockEl.addEventListener("change", () => {
+  const v = renderer.getViewState();
   tailFocusOn = !!viewLockEl.checked;
   if (tailFocusOn) {
-    renderer.clearCameraOverride?.(); // auto tail focus
+    renderer.clearCameraOverride(); // auto tail focus
   } else {
     // Freeze at current view; user can scrub via minimap.
-    renderer.setCameraOverrideY?.(v.cameraY);
+    renderer.setCameraOverrideY(v.cameraY);
   }
   updateControls();
 });
