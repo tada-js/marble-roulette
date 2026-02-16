@@ -1,4 +1,8 @@
 node_modules/
 output/
 .DS_Store
-
+.env
+.env.local
+.env.*
+!.env.example
+progress.md
