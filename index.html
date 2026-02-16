@@ -3,24 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="contact-email" content="your-email@example.com" />
     <title>데구르르 (Degururu)</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div id="app">
       <header class="topbar">
-        <div class="brand">
+        <div class="topbar__left brand">
           <div class="brand__title">데구르르 (Degururu)</div>
           <div class="brand__subtitle">공으로 즐기는 핀볼 사다리</div>
         </div>
-        <div class="topbar__actions">
-          <button id="bgm-btn" class="btn btn--ghost" type="button" aria-pressed="false">BGM 끔</button>
-          <button id="winner-btn" class="btn btn--ghost" type="button" disabled>마지막 결과</button>
-          <span class="topbar__divider" aria-hidden="true"></span>
-          <button id="settings-btn" class="btn btn--ghost" type="button">공 설정</button>
-          <button id="inquiry-btn" class="btn btn--ghost" type="button">문의</button>
+        <div class="topbar__center">
           <button id="start-btn" class="btn btn--primary topbar__start" type="button">게임 시작</button>
+          <button id="pause-btn" class="btn btn--ghost topbar__pause" type="button" disabled>일시정지</button>
+        </div>
+        <div class="topbar__right">
+          <button id="bgm-btn" class="btn btn--ghost" type="button" aria-pressed="false">BGM 끔</button>
+          <button id="inquiry-btn" class="btn btn--ghost" type="button">문의</button>
         </div>
       </header>
 
@@ -37,6 +36,10 @@
             </div>
             <canvas id="minimap" width="260" height="190"></canvas>
             <div class="mini__hint" id="minimap-hint">미니맵을 클릭해 이동. 후미 추적으로 자동 추적을 재개합니다.</div>
+          </div>
+          <div class="hud__actions">
+            <button id="settings-btn" class="btn btn--ghost" type="button">공 설정</button>
+            <button id="winner-btn" class="btn btn--ghost" type="button" disabled>마지막 결과</button>
           </div>
           <div class="balls" id="balls"></div>
         </div>
@@ -59,7 +62,7 @@
               <div class="twModal__title">공 설정</div>
               <div class="twModal__desc">공을 추가/삭제하고, 이름과 이미지를 바꿀 수 있어요.</div>
             </div>
-            <button class="twModal__close" value="close" type="submit" aria-label="닫기">×</button>
+            <button class="twModal__close" value="close" type="submit" formnovalidate aria-label="닫기">×</button>
           </div>
 
           <div class="twModal__body">
@@ -81,20 +84,20 @@
           <div class="twModal__header">
             <div class="twModal__headText">
               <div class="twModal__title">문의하기</div>
-              <div class="twModal__desc">입력한 내용이 메일 앱으로 전송됩니다.</div>
+              <div class="twModal__desc">문의 내용을 안전하게 전송합니다.</div>
             </div>
-            <button class="twModal__close" value="close" type="submit" aria-label="닫기">×</button>
+            <button class="twModal__close" value="close" type="submit" formnovalidate aria-label="닫기">×</button>
           </div>
 
           <div class="twModal__body">
             <div class="inquiryForm">
               <div class="field">
                 <label for="inq-name">이름</label>
-                <input id="inq-name" name="name" type="text" maxlength="40" placeholder="홍길동" />
+                <input id="inq-name" name="name" type="text" maxlength="40" required autocomplete="name" placeholder="홍길동" />
               </div>
               <div class="field">
                 <label for="inq-email">이메일</label>
-                <input id="inq-email" name="email" type="text" maxlength="120" placeholder="you@example.com" />
+                <input id="inq-email" name="email" type="email" maxlength="120" required autocomplete="email" placeholder="you@example.com" />
               </div>
               <div class="field">
                 <label for="inq-subject">제목</label>
@@ -103,13 +106,18 @@
               <div class="field">
                 <label for="inq-message">내용</label>
                 <textarea id="inq-message" name="message" rows="6" maxlength="2000" required placeholder="문의 내용을 작성해 주세요."></textarea>
+                <div class="inquiryCounter"><span id="inq-message-count">0</span>/2000</div>
+              </div>
+              <div class="inquiryHoneypot" aria-hidden="true">
+                <label for="inq-website">웹사이트</label>
+                <input id="inq-website" name="website" type="text" tabindex="-1" autocomplete="off" />
               </div>
               <div id="inquiry-status" class="inquiryStatus" aria-live="polite"></div>
             </div>
           </div>
 
           <div class="twModal__footer">
-            <button id="inquiry-send" class="btn btn--primary" type="submit">메일 앱으로 보내기</button>
+            <button id="inquiry-send" class="btn btn--primary" type="submit">메일 보내기</button>
           </div>
         </div>
       </form>

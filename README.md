@@ -6,7 +6,8 @@
 
 - 기본 공: 강아지 / 토끼 / 햄스터
 - 공별 이름/이미지 커스터마이즈(업로드, 로컬 저장)
-- 보드 클릭으로 드롭 위치 지정, `DROP` 버튼으로 공 한 번에 동시에 떨어뜨리기
+- `게임 시작`으로 선택된 공 전체 동시 투하
+- `일시정지/이어하기`, 시점 고정/자유 시점 전환
 - 당첨자: 가장 늦게 바닥(슬롯)에 도착한 공
 - `window.render_game_to_text()` / `window.advanceTime(ms)` 제공(자동화 테스트 용이)
 
@@ -20,6 +21,18 @@ npm run dev
 ```
 
 브라우저에서 `http://localhost:5173` 접속.
+
+문의 메일 전송(서버 API) 설정:
+
+```bash
+cp .env.example .env.local
+# .env.local에 실제 값을 입력
+```
+
+필수 환경변수:
+- `INQUIRY_TO_EMAIL`: 문의 수신 주소
+- `RESEND_API_KEY`: Resend API 키
+- `INQUIRY_FROM_EMAIL`: 발신 주소(검증 도메인 권장)
 
 Vite 기반 점진 마이그레이션(1단계) 개발 서버:
 
@@ -40,5 +53,5 @@ npm run build:vite
 ## GitHub Flow
 
 - `main`: 배포/릴리즈 기준
-- 작업은 `codex/<topic>` 또는 `feature/<topic>` 브랜치 생성
+- 작업은 `feature/<topic>` 브랜치 생성
 - PR로 `main`에 머지 (CodeRabbit 리뷰 활용)

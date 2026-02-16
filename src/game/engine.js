@@ -117,6 +117,7 @@ export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog =
   for (const b of ballsCatalog) counts[b.id] = 1;
   return {
     mode: "menu", // menu | playing
+    paused: false,
     t: 0,
     seed,
     rng: makeRng(seed),
@@ -193,6 +194,7 @@ export function setDropX(state, x) {
 
 export function startGame(state) {
   state.mode = "playing";
+  state.paused = false;
   state.t = 0;
   state.marbles = [];
   state.lastResult = null;
@@ -210,6 +212,7 @@ export function startGame(state) {
 
 export function resetGame(state) {
   state.mode = "menu";
+  state.paused = false;
   state.t = 0;
   state.marbles = [];
   state.lastResult = null;
@@ -508,6 +511,7 @@ export function snapshotForText(state) {
   return {
     note: "coords: origin at top-left. x -> right, y -> down. units are canvas/world pixels.",
     mode: state.mode,
+    paused: !!state.paused,
     t: Number(state.t.toFixed(3)),
     counts: state.counts,
     pendingCount: state.pending.length,
