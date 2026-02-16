@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="contact-email" content="your-email@example.com" />
     <title>데구르르 (Degururu)</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -18,6 +19,7 @@
           <button id="winner-btn" class="btn btn--ghost" type="button" disabled>마지막 결과</button>
           <span class="topbar__divider" aria-hidden="true"></span>
           <button id="settings-btn" class="btn btn--ghost" type="button">공 설정</button>
+          <button id="inquiry-btn" class="btn btn--ghost" type="button">문의</button>
           <button id="start-btn" class="btn btn--primary topbar__start" type="button">게임 시작</button>
         </div>
       </header>
@@ -68,6 +70,46 @@
             <button id="add-ball" class="btn btn--ghost" type="button">공 추가</button>
             <button id="restore-defaults" class="btn btn--ghost" type="button">기본값 복원</button>
             <button class="btn btn--primary" value="close" type="submit">닫기</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="inquiry-dialog" class="dialog dialog--settings">
+      <form method="dialog" class="twModal" id="inquiry-form">
+        <div class="twModal__card">
+          <div class="twModal__header">
+            <div class="twModal__headText">
+              <div class="twModal__title">문의하기</div>
+              <div class="twModal__desc">입력한 내용이 메일 앱으로 전송됩니다.</div>
+            </div>
+            <button class="twModal__close" value="close" type="submit" aria-label="닫기">×</button>
+          </div>
+
+          <div class="twModal__body">
+            <div class="inquiryForm">
+              <div class="field">
+                <label for="inq-name">이름</label>
+                <input id="inq-name" name="name" type="text" maxlength="40" placeholder="홍길동" />
+              </div>
+              <div class="field">
+                <label for="inq-email">이메일</label>
+                <input id="inq-email" name="email" type="text" maxlength="120" placeholder="you@example.com" />
+              </div>
+              <div class="field">
+                <label for="inq-subject">제목</label>
+                <input id="inq-subject" name="subject" type="text" maxlength="80" required placeholder="문의 제목" />
+              </div>
+              <div class="field">
+                <label for="inq-message">내용</label>
+                <textarea id="inq-message" name="message" rows="6" maxlength="2000" required placeholder="문의 내용을 작성해 주세요."></textarea>
+              </div>
+              <div id="inquiry-status" class="inquiryStatus" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <div class="twModal__footer">
+            <button id="inquiry-send" class="btn btn--primary" type="submit">메일 앱으로 보내기</button>
           </div>
         </div>
       </form>

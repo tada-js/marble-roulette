@@ -19,6 +19,7 @@ import { BALL_LIBRARY } from "./game/assets.js";
 const canvas = document.getElementById("game");
 const startBtn = document.getElementById("start-btn");
 const settingsBtn = document.getElementById("settings-btn");
+const inquiryBtn = document.getElementById("inquiry-btn");
 const bgmBtn = document.getElementById("bgm-btn");
 const winnerBtn = document.getElementById("winner-btn");
 const ballsEl = document.getElementById("balls");
@@ -44,6 +45,14 @@ const addBallBtn = document.getElementById("add-ball");
 const winnerDialog = document.getElementById("winner-dialog");
 const winnerImgEl = document.getElementById("winner-img");
 const winnerNameEl = document.getElementById("winner-name");
+
+const inquiryDialog = document.getElementById("inquiry-dialog");
+const inquiryForm = document.getElementById("inquiry-form");
+const inquiryNameInput = document.getElementById("inq-name");
+const inquiryEmailInput = document.getElementById("inq-email");
+const inquirySubjectInput = document.getElementById("inq-subject");
+const inquiryMessageInput = document.getElementById("inq-message");
+const inquiryStatusEl = document.getElementById("inquiry-status");
 
 // Hand-tuned extra rotors can be added here (world coords or xFrac/yFrac in [0..1]).
 // These override the auto-added mid-section rotors (the early rotor ring stays).
@@ -571,6 +580,46 @@ startBtn.addEventListener("click", () => {
 
 settingsBtn.addEventListener("click", () => {
   settings.open();
+});
+
+inquiryBtn?.addEventListener("click", () => {
+  if (!inquiryDialog) return;
+  if (inquiryStatusEl) inquiryStatusEl.textContent = "";
+  inquiryDialog.showModal();
+});
+
+inquiryForm?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const targetEmail = String(document.querySelector('meta[name="contact-email"]')?.content || "").trim();
+  if (!targetEmail || targetEmail === "your-email@example.com") {
+    if (inquiryStatusEl) inquiryStatusEl.textContent = "수신 메일 주소가 설정되지 않았습니다. 관리자에게 문의하세요.";
+    return;
+  }
+
+  const name = String(inquiryNameInput?.value || "").trim();
+  const email = String(inquiryEmailInput?.value || "").trim();
+  const subject = String(inquirySubjectInput?.value || "").trim();
+  const message = String(inquiryMessageInput?.value || "").trim();
+  if (!subject || !message) {
+    if (inquiryStatusEl) inquiryStatusEl.textContent = "제목과 내용을 입력해 주세요.";
+    return;
+  }
+
+  const lines = [
+    `[데구르르 문의]`,
+    "",
+    `이름: ${name || "-"}`,
+    `이메일: ${email || "-"}`,
+    "",
+    "내용:",
+    message
+  ];
+  const mailSubject = `[데구르르 문의] ${subject}`;
+  const body = lines.join("\n");
+  const href = `mailto:${encodeURIComponent(targetEmail)}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = href;
+  if (inquiryStatusEl) inquiryStatusEl.textContent = "메일 앱을 여는 중입니다...";
+  inquiryDialog?.close();
 });
 
 bgmBtn?.addEventListener("click", async () => {
