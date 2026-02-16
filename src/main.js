@@ -235,7 +235,7 @@ function renderBallCards() {
     plus.textContent = "+";
 
     const applyDelta = (d) => {
-      if (state.mode === "playing") return;
+      if (state.mode === "playing" && !state.winner) return;
       const next = getBallCount(state, b.id) + d;
       setBallCount(state, b.id, next);
       saveBallCounts(state.counts);
@@ -246,7 +246,7 @@ function renderBallCards() {
     plus.addEventListener("click", () => applyDelta(+1));
 
     count.addEventListener("input", () => {
-      if (state.mode === "playing") return;
+      if (state.mode === "playing" && !state.winner) return;
       const next = Number(count.value);
       setBallCount(state, b.id, next);
       saveBallCounts(state.counts);
@@ -254,7 +254,7 @@ function renderBallCards() {
       updateControls();
     });
 
-    const disabled = state.mode === "playing";
+    const disabled = state.mode === "playing" && !state.winner;
     minus.disabled = disabled;
     plus.disabled = disabled;
     count.disabled = disabled;

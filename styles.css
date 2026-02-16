@@ -208,6 +208,11 @@ canvas#game {
   background: rgba(255,255,255,0.03);
   box-shadow: none;
 }
+.topbar__actions .btn--ghost:hover:not(:disabled) {
+  border-color: rgba(255,255,255,0.34);
+  background: rgba(255,255,255,0.14);
+  color: #fff;
+}
 .btn--danger {
   border-color: rgba(255, 77, 109, 0.55);
   background: linear-gradient(180deg, rgba(255, 77, 109, 0.30), rgba(255, 77, 109, 0.12));

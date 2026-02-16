@@ -1,6 +1,6 @@
-# Marble Roulette (Pinball Ladder)
+# 데구르르 (Degururu)
 
-동물 공(기본: 강아지/토끼/햄스터)이 핀볼 보드의 핀(peg)을 튕기며 아래 슬롯으로 떨어지는 "사다리" 스타일의 마블 룰렛 게임입니다.
+동물 공(기본: 강아지/토끼/햄스터)이 핀볼 보드의 핀(peg)을 튕기며 아래 슬롯으로 떨어지는 "사다리" 스타일의 데구르르 게임입니다.
 
 ## Features
 
@@ -14,7 +14,7 @@
 
 ```bash
 # repo root에서 실행
-cd marble-roulette
+cd degururu
 npm ci
 npm run dev
 ```
