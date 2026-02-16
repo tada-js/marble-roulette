@@ -10,7 +10,7 @@
 
 ## 토큰
 
-`/Users/kimseonghun/Desktop/project/marble-roulette/styles.css`의 `:root`에서 관리합니다.
+`styles.css`의 `:root`에서 관리합니다.
 
 - `--ctrl-h-sm`, `--ctrl-h-md`, `--ctrl-h-lg`: 컨트롤 높이
 - `--ctrl-px-sm`, `--ctrl-px-md`, `--ctrl-px-lg`: 컨트롤 가로 패딩
@@ -20,11 +20,11 @@
 ## 컴포넌트
 
 - `Button`, `IconButton`
-  - 파일: `/Users/kimseonghun/Desktop/project/marble-roulette/src/ui-react/components/button.tsx`
+  - 파일: `src/ui-react/components/button.tsx`
   - variant: `primary | ghost | danger | accent`
   - size: `sm | md | lg`
 - `ModalCard`
-  - 파일: `/Users/kimseonghun/Desktop/project/marble-roulette/src/ui-react/components/modal.tsx`
+  - 파일: `src/ui-react/components/modal.tsx`
   - 헤더/본문/푸터/닫기 버튼을 공통 구조로 제공
 
 ## 스타일 규칙

@@ -47,8 +47,8 @@ npm run build:vite
 
 ## Design System
 
-- 가이드: `/Users/kimseonghun/Desktop/project/marble-roulette/docs/design-system.md`
-- 공통 UI 컴포넌트: `/Users/kimseonghun/Desktop/project/marble-roulette/src/ui-react/components`
+- 가이드: `docs/design-system.md`
+- 공통 UI 컴포넌트: `src/ui-react/components`
 
 ## GitHub Flow
 
