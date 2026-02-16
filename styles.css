@@ -29,6 +29,27 @@ html, body {
     radial-gradient(900px 900px at 40% 90%, rgba(117, 90, 255, 0.10), transparent 70%),
     linear-gradient(180deg, var(--bg0), var(--bg1));
   overflow: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 255, 0.35) rgba(0, 0, 0, 0.20);
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.20);
+}
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid rgba(0,0,0,0.30);
+  background: linear-gradient(180deg, rgba(0,255,255,0.55), rgba(255,0,170,0.40));
+}
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(0,255,255,0.70), rgba(255,176,0,0.55));
 }
 
 #app {
@@ -51,6 +72,8 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .topbar__divider {
   width: 1px;
@@ -85,6 +108,7 @@ html, body {
   border-right: 1px solid var(--stroke);
   background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
   overflow: auto;
+  overflow-x: hidden;
 }
 
 .board {
@@ -149,6 +173,14 @@ canvas#game {
 .btn--ghost {
   background: rgba(255,255,255,0.03);
   box-shadow: none;
+}
+.btn--settings {
+  border-color: rgba(255, 0, 170, 0.55);
+  background: linear-gradient(180deg, rgba(255, 0, 170, 0.22), rgba(0, 255, 255, 0.10));
+}
+.btn--settings:hover {
+  border-color: rgba(0, 255, 255, 0.55);
+  background: linear-gradient(180deg, rgba(0, 255, 255, 0.18), rgba(255, 176, 0, 0.10));
 }
 .btn--danger {
   border-color: rgba(255, 77, 109, 0.55);
@@ -269,12 +301,6 @@ canvas#game {
 .legend__swatch--portal { background: rgba(202, 160, 255, 0.85); }
 .legend__swatch--wind { background: rgba(69, 243, 195, 0.20); }
 
-.hud__hint {
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.35;
-}
-
 .balls {
   display: grid;
   grid-template-columns: 1fr;
@@ -301,10 +327,67 @@ canvas#game {
   background: rgba(0,0,0,0.18);
   overflow: hidden;
 }
-.ball-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ball-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ball-meta { min-width: 0; }
-.ball-name { font-weight: 800; line-height: 1.1; }
+.ball-name {
+  font-weight: 800;
+  line-height: 1.1;
+  min-width: 0;
+}
+.ball-name__text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ball-id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+/* Tailwind-ish tooltip (instant on hover/focus). */
+.tooltip { position: relative; }
+.tooltip::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translate(-50%, 0);
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  white-space: nowrap;
+  background: rgba(17, 24, 39, 0.94);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.96);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  padding: 7px 10px;
+  border-radius: 10px;
+  box-shadow: 0 18px 55px rgba(0,0,0,0.55);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+.tooltip::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  width: 10px;
+  height: 10px;
+  transform: translateX(-50%) rotate(45deg);
+  background: rgba(17, 24, 39, 0.94);
+  border-left: 1px solid rgba(255,255,255,0.14);
+  border-bottom: 1px solid rgba(255,255,255,0.14);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+.tooltip:hover::after,
+.tooltip:focus-visible::after,
+.tooltip:hover::before,
+.tooltip:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+}
 
 .ball-qty {
   margin-left: auto;
@@ -675,6 +758,10 @@ dialog.dialog--winner::backdrop {
   .stage {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
+  }
+  .topbar__actions {
+    justify-content: flex-start;
+    gap: 8px;
   }
   .hud {
     border-right: none;

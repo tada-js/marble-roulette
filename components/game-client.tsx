@@ -24,19 +24,16 @@ export default function GameClient() {
           <div className="brand__subtitle">공으로 즐기는 핀볼 사다리</div>
         </div>
         <div className="topbar__actions">
-          <button id="settings-btn" className="btn btn--ghost" type="button">
-            설정
-          </button>
           <button id="bgm-btn" className="btn btn--ghost" type="button" aria-pressed="false">
             BGM 끔
-          </button>
-          <button id="reset-btn" className="btn btn--ghost" type="button">
-            초기화
           </button>
           <button id="winner-btn" className="btn btn--ghost" type="button" disabled>
             마지막 결과
           </button>
           <span className="topbar__divider" aria-hidden="true" />
+          <button id="settings-btn" className="btn btn--settings" type="button">
+            공 설정
+          </button>
           <button id="start-btn" className="btn btn--primary topbar__start" type="button">
             시작
           </button>
@@ -66,11 +63,7 @@ export default function GameClient() {
               미니맵을 클릭해 이동. 후미 추적으로 자동 추적을 재개합니다.
             </div>
           </div>
-          <div className="hud__hint" id="hint">
-            시작을 누르면 선택한 공이 한 번에 떨어집니다.
-          </div>
           <div className="balls" id="balls" />
-          <div className="result" id="result" aria-live="polite" />
         </div>
 
         <div className="board">

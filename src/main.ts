@@ -11,6 +11,7 @@ import {
   getTotalSelectedCount,
   setBallCount
 } from "./game/engine";
+import { BALL_LIBRARY } from "./game/assets.js";
 import { makeRenderer } from "./game/render";
 import { loadBallsCatalog, loadBallCounts, saveBallsCatalog, saveBallCounts } from "./ui/storage.js";
 import { mountSettingsDialog } from "./ui/settings.js";
@@ -41,13 +42,10 @@ function mustGetEl<T extends HTMLElement>(id: string): T {
 
 const canvas = mustGetEl<HTMLCanvasElement>("game");
 const startBtn = mustGetEl<HTMLButtonElement>("start-btn");
-const resetBtn = mustGetEl<HTMLButtonElement>("reset-btn");
 const settingsBtn = mustGetEl<HTMLButtonElement>("settings-btn");
 const bgmBtn = mustGetEl<HTMLButtonElement>("bgm-btn");
 const winnerBtn = mustGetEl<HTMLButtonElement>("winner-btn");
 const ballsEl = mustGetEl<HTMLDivElement>("balls");
-const resultEl = mustGetEl<HTMLDivElement>("result");
-const hintEl = mustGetEl<HTMLDivElement>("hint");
 const minimap = mustGetEl<HTMLCanvasElement>("minimap");
 const viewLockEl = mustGetEl<HTMLInputElement>("view-lock");
 const minimapHintEl = mustGetEl<HTMLDivElement>("minimap-hint");
@@ -169,43 +167,13 @@ const settings = mountSettingsDialog(
   setBalls
 ) as { open: () => void; render: () => void };
 
-/** makeNewBall helper. */
-function makeNewBall(): BallCatalogEntry {
-  const h = Math.floor(Math.random() * 360);
-  const bg0 = `hsl(${h}, 95%, 58%)`;
-  const bg1 = `hsl(${(h + 60) % 360}, 95%, 52%)`;
-  const svg = encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="${bg0}"/>
-          <stop offset="1" stop-color="${bg1}"/>
-        </linearGradient>
-      </defs>
-      <rect width="128" height="128" rx="64" fill="url(#g)"/>
-      <circle cx="64" cy="74" r="38" fill="rgba(255,255,255,0.88)"/>
-      <circle cx="52" cy="72" r="4" fill="#111"/>
-      <circle cx="76" cy="72" r="4" fill="#111"/>
-      <path d="M56 90c7 7 15 7 22 0" fill="none" stroke="rgba(0,0,0,0.28)" stroke-width="6" stroke-linecap="round"/>
-    </svg>`
-  );
-  const idBase = `ball-${Date.now().toString(36)}`;
-  let id = idBase;
-  let n = 1;
-  while (ballsCatalog.some((b) => b.id === id)) {
-    id = `${idBase}-${n++}`;
-  }
-  return {
-    id,
-    name: "새 공",
-    imageDataUrl: `data:image/svg+xml;utf8,${svg}`,
-    tint: "#ffffff"
-  };
-}
-
 addBallBtn.addEventListener("click", () => {
   if (state.mode === "playing") return;
-  const next = [...ballsCatalog, makeNewBall()];
+  if (ballsCatalog.length >= BALL_LIBRARY.length) return;
+  const used = new Set(ballsCatalog.map((b) => b.id));
+  const nextBall = BALL_LIBRARY.find((b) => !used.has(b.id));
+  if (!nextBall) return;
+  const next = [...ballsCatalog, structuredClone(nextBall)];
   saveBallsCatalog(next);
   setBalls(next);
   settings.render();
@@ -230,8 +198,14 @@ function renderBallCards() {
     const meta = document.createElement("div");
     meta.className = "ball-meta";
     const name = document.createElement("div");
-    name.className = "ball-name";
-    name.textContent = b.name;
+    name.className = "ball-name tooltip";
+    name.setAttribute("data-tip", b.name);
+    name.setAttribute("aria-label", b.name);
+    name.tabIndex = 0;
+    const nameText = document.createElement("span");
+    nameText.className = "ball-name__text";
+    nameText.textContent = b.name;
+    name.appendChild(nameText);
     const id = document.createElement("div");
     id.className = "ball-id";
     id.textContent = b.id;
@@ -301,20 +275,15 @@ renderBallCards();
 /** updateControls helper. */
 function updateControls() {
   const total = getTotalSelectedCount(state);
-  startBtn.disabled = state.mode === "playing";
+  const completed =
+    state.mode === "playing" &&
+    state.released &&
+    state.totalToDrop > 0 &&
+    state.finished.length >= state.totalToDrop;
+  startBtn.textContent = state.mode === "playing" && !completed ? "재시작" : "시작";
+  startBtn.disabled = state.mode !== "playing" && total <= 0;
   viewLockEl.disabled = !(state.mode === "playing" && state.released);
   viewLockEl.checked = !!tailFocusOn;
-  hintEl.textContent =
-    state.mode === "playing"
-      ? state.released
-        ? `진행 중... 완료: ${state.finished.length}/${state.totalToDrop}`
-        : `준비 중... (시작을 누르면 바로 떨어집니다)`
-      : `수량을 고른 뒤 시작하세요. 총 ${total}개`;
-}
-
-/** setResultText helper. */
-function setResultText(msg: string): void {
-  resultEl.textContent = msg || "";
 }
 
 /** updateCanvasCoordReadout helper. */
@@ -556,7 +525,6 @@ function showWinnerModal() {
 /** tryStart helper. */
 function tryStart() {
   if (getTotalSelectedCount(state) <= 0) {
-    setResultText("최소 1개 이상 선택하세요.");
     return false;
   }
   // Make each run unpredictable to the user, but still deterministic within the run.
@@ -566,7 +534,6 @@ function tryStart() {
   startGame(state);
   state._shownResultId = null;
   state._shownWinnerT = null;
-  setResultText("");
   renderBallCards(); // disable +/- while playing
   updateControls();
   fixedAccumulatorSec = 0;
@@ -576,27 +543,24 @@ function tryStart() {
   viewLockEl.checked = true;
   setWinnerCache(null);
   // Start implies drop: release all marbles immediately.
-  const n = dropAll(state);
-  if (n) setResultText(`시작! ${n}개 투하`);
+  dropAll(state);
   return true;
 }
 
 startBtn.addEventListener("click", () => {
+  if (state.mode === "playing") {
+    resetGame(state);
+    state._shownResultId = null;
+    state._shownWinnerT = null;
+    fixedAccumulatorSec = 0;
+    renderBallCards();
+    renderer.clearCameraOverride();
+    tailFocusOn = true;
+    viewLockEl.checked = true;
+    setWinnerCache(null);
+    updateControls();
+  }
   tryStart();
-});
-
-resetBtn.addEventListener("click", () => {
-  resetGame(state);
-  state._shownResultId = null;
-  state._shownWinnerT = null;
-  fixedAccumulatorSec = 0;
-  setResultText("");
-  renderBallCards();
-  renderer.clearCameraOverride();
-  tailFocusOn = true;
-  viewLockEl.checked = true;
-  setWinnerCache(null);
-  updateControls();
 });
 
 settingsBtn.addEventListener("click", () => {
@@ -660,10 +624,7 @@ function onAfterFrame() {
   if (state.winner && state._shownWinnerT !== state.winner.t) {
     state._shownWinnerT = state.winner.t;
     const p = getWinnerPayloadFromState();
-    if (p) {
-      setWinnerCache(p);
-      setResultText(`마지막 도착: ${p.name} (${p.order}번째)`);
-    }
+    if (p) setWinnerCache(p);
     showWinnerModal();
   }
   updateControls();
