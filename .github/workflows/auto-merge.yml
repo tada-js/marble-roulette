@@ -1,0 +1,39 @@
+name: auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    name: enable-auto-merge
+    if: >
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable PR auto-merge (squash)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set +e
+          OUTPUT="$(gh pr merge "${PR_NUMBER}" --auto --squash 2>&1)"
+          STATUS=$?
+          set -e
+
+          echo "${OUTPUT}"
+          if [ "${STATUS}" -eq 0 ]; then
+            exit 0
+          fi
+
+          if echo "${OUTPUT}" | grep -Eqi "auto-merge is already enabled|pull request is already merged|pull request is closed"; then
+            exit 0
+          fi
+
+          exit "${STATUS}"
