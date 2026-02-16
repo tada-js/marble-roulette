@@ -28,32 +28,43 @@ export const SettingsStyle: Story = {
       }}
     >
       <ModalCard
+        className="settingsModal twModal__card--scrollable"
+        size="lg"
         title="공 설정"
         description="공을 추가/삭제하고, 이름과 이미지를 바꿀 수 있어요."
         onClose={() => {
           // story action placeholder
         }}
         footer={
-          <>
-            <Button variant="ghost">공 추가</Button>
-            <Button variant="ghost">기본값 복원</Button>
-            <Button variant="primary">닫기</Button>
-          </>
+          <div className="settingsFooter">
+            <div className="settingsFooter__left">
+              <Button variant="ghost">공 추가</Button>
+              <Button variant="ghost">기본값 복원</Button>
+            </div>
+            <div className="settingsFooter__right">
+              <Button variant="primary">적용</Button>
+              <Button variant="ghost">닫기</Button>
+            </div>
+          </div>
         }
       >
         <div className="twList">
           <div className="twItem">
-            <div className="twItem__thumb"></div>
-            <div className="twItem__main">
-              <div className="twItem__grid">
-                <div className="field">
-                  <label>이름</label>
-                  <input type="text" value="강아지" readOnly />
-                </div>
-                <div className="field">
-                  <label>ID (고정)</label>
-                  <input type="text" value="dog" readOnly />
-                </div>
+            <div className="twItem__head">
+              <div className="twItem__thumb"></div>
+              <div className="twItem__headMeta">
+                <div className="twItem__headLabel">공 ID</div>
+                <div className="twItem__idBadge">dog</div>
+              </div>
+            </div>
+            <div className="twItem__grid">
+              <div className="field">
+                <label>이름</label>
+                <input type="text" value="강아지" readOnly />
+              </div>
+              <div className="field">
+                <label>이미지</label>
+                <input type="text" value="file.png" readOnly />
               </div>
             </div>
           </div>
@@ -76,6 +87,7 @@ export const WinnerStyle: Story = {
       }}
     >
       <ModalCard
+        size="md"
         title="마지막 결과"
         description="마지막으로 도착한 공을 확인하세요."
         onClose={() => {

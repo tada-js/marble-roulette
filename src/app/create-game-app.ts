@@ -1,6 +1,7 @@
 import {
   makeGameState,
   makeRng,
+  type FinishedMarble,
   resetGame,
   snapshotForText,
   startGame,
@@ -10,6 +11,7 @@ import {
   getTotalSelectedCount,
   setBallCount,
 } from "../game/engine.ts";
+import { BALL_LIBRARY, DEFAULT_BALLS } from "../game/assets.ts";
 import { makeRenderer } from "../game/render.ts";
 import { createGameBoard } from "../game/board-config.ts";
 import { createLoopController } from "../game/loop-controller.ts";
@@ -21,13 +23,14 @@ import { createAudioController } from "../ui/audio-controller.js";
 import { validateInquiryInput, submitInquiry, showInquiryToast } from "../ui/inquiry.js";
 import { playWinnerFanfare } from "../ui/result-controller.js";
 import { mountKeyboardControls } from "../ui/keyboard-controls.js";
+import { clampResultCount, selectLastFinishers } from "./ui-selectors";
 import { setUiActions, setUiSnapshot } from "./ui-store";
 import type {
   InquiryField,
   InquiryForm,
   InquirySubmitResult,
+  ResultUiItem,
   UiSnapshot,
-  WinnerPayload,
 } from "./ui-store";
 
 const EMPTY_INQUIRY_FORM = Object.freeze({
@@ -40,8 +43,20 @@ const EMPTY_INQUIRY_FORM = Object.freeze({
 
 type UiLocalState = {
   settingsOpen: boolean;
-  winnerOpen: boolean;
-  winnerPayload: WinnerPayload | null;
+  settingsDirty: boolean;
+  settingsConfirmOpen: boolean;
+  settingsDraft: CatalogDraftItem[] | null;
+  winnerCount: number;
+  winnerCountWasClamped: boolean;
+  resultState: {
+    open: boolean;
+    phase: "idle" | "countdown" | "revealing" | "summary";
+    countdownValue: number | null;
+    revealIndex: number;
+    requestedCount: number;
+    effectiveCount: number;
+    items: ResultUiItem[];
+  };
   inquiryOpen: boolean;
   inquirySubmitting: boolean;
   inquiryStatus: string;
@@ -66,6 +81,13 @@ type InquiryValidationResult =
       message: string;
     };
 
+type CatalogDraftItem = {
+  id: string;
+  name: string;
+  imageDataUrl: string;
+  tint: string;
+};
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const fr = new FileReader();
@@ -73,6 +95,81 @@ function fileToDataUrl(file: File): Promise<string> {
     fr.onload = () => resolve(String(fr.result || ""));
     fr.readAsDataURL(file);
   });
+}
+
+function sanitizeBallName(name: unknown, fallback: string): string {
+  const value = String(name || "")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  return value || fallback;
+}
+
+function isDataImageUrl(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("data:image/");
+}
+
+function cloneCatalogForDraft(input: unknown[]): CatalogDraftItem[] {
+  return input.map((ball) => {
+    const item = ball as {
+      id?: unknown;
+      name?: unknown;
+      imageDataUrl?: unknown;
+      tint?: unknown;
+    };
+    return {
+      id: String(item.id || ""),
+      name: String(item.name || ""),
+      imageDataUrl: String(item.imageDataUrl || ""),
+      tint: typeof item.tint === "string" ? item.tint : "#ffffff",
+    };
+  });
+}
+
+function catalogFingerprint(input: CatalogDraftItem[]): string {
+  return JSON.stringify(
+    input.map((ball) => ({
+      id: ball.id,
+      name: ball.name,
+      imageDataUrl: ball.imageDataUrl,
+      tint: ball.tint,
+    }))
+  );
+}
+
+function toResultCopyText(items: ResultUiItem[]): string {
+  if (!items.length) return "";
+  return items.map((item) => `${item.rank}. ${item.name}`).join("\n");
+}
+
+async function copyTextWithFallback(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fallback below.
+  }
+
+  try {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "true");
+    area.style.position = "fixed";
+    area.style.top = "-9999px";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(area);
+    return !!copied;
+  } catch {
+    return false;
+  }
 }
 
 function getDomRefs() {
@@ -125,8 +222,20 @@ export function bootstrapGameApp() {
 
   const uiState: UiLocalState = {
     settingsOpen: false,
-    winnerOpen: false,
-    winnerPayload: null,
+    settingsDirty: false,
+    settingsConfirmOpen: false,
+    settingsDraft: null,
+    winnerCount: 1,
+    winnerCountWasClamped: false,
+    resultState: {
+      open: false,
+      phase: "idle",
+      countdownValue: null,
+      revealIndex: 0,
+      requestedCount: 1,
+      effectiveCount: 0,
+      items: [],
+    },
     inquiryOpen: false,
     inquirySubmitting: false,
     inquiryStatus: "",
@@ -134,7 +243,14 @@ export function bootstrapGameApp() {
     inquiryForm: { ...EMPTY_INQUIRY_FORM },
   };
 
+  let revealTimerIds: number[] = [];
   let refreshUi: () => void = () => {};
+
+  function clearRevealTimer() {
+    if (!revealTimerIds.length) return;
+    for (const timerId of revealTimerIds) window.clearTimeout(timerId);
+    revealTimerIds = [];
+  }
 
   const catalogController = createCatalogController({
     state,
@@ -143,48 +259,257 @@ export function bootstrapGameApp() {
     },
   });
 
-  function getWinnerPayloadFromState() {
-    return catalogController.getWinnerPayload(state?.winner?.ballId) as WinnerPayload | null;
-  }
-
   const audioController = createAudioController({
     onStateChange: () => {
       refreshUi();
     },
   });
 
+  function getWinnerCountMax() {
+    if (state.totalToDrop > 0) return Math.max(1, Number(state.totalToDrop) || 1);
+    return Math.max(1, getTotalSelectedCount(state));
+  }
+
   function isBallControlLocked() {
     return state.mode === "playing" && !state.winner;
+  }
+
+  function closeResultModalPresentation() {
+    clearRevealTimer();
+    uiState.resultState.open = false;
+    uiState.resultState.countdownValue = null;
+    uiState.resultState.phase = "summary";
+    uiState.resultState.revealIndex = uiState.resultState.effectiveCount;
+  }
+
+  function resetResultHistory() {
+    clearRevealTimer();
+    uiState.resultState = {
+      open: false,
+      phase: "idle",
+      countdownValue: null,
+      revealIndex: 0,
+      requestedCount: uiState.winnerCount,
+      effectiveCount: 0,
+      items: [],
+    };
+  }
+
+  function mapFinishedToResultItems(selected: FinishedMarble[]): ResultUiItem[] {
+    return selected.map((entry, idx) => {
+      const payload = catalogController.getWinnerPayload(entry.ballId);
+      return {
+        rank: idx + 1,
+        ballId: entry.ballId,
+        name: payload?.name || entry.ballId || "알 수 없는 공",
+        img: payload?.img || "",
+        finishedAt: entry.t,
+        slot: entry.slot,
+        label: entry.label,
+      };
+    });
+  }
+
+  function startSingleResultCountdown() {
+    clearRevealTimer();
+    if (!uiState.resultState.open || uiState.resultState.effectiveCount <= 0) return;
+    uiState.resultState.phase = "countdown";
+    uiState.resultState.countdownValue = 3;
+    uiState.resultState.revealIndex = 0;
+
+    revealTimerIds = [
+      window.setTimeout(() => {
+        uiState.resultState.countdownValue = 2;
+        refreshUi();
+      }, 560),
+      window.setTimeout(() => {
+        uiState.resultState.countdownValue = 1;
+        refreshUi();
+      }, 1120),
+      window.setTimeout(() => {
+        uiState.resultState.countdownValue = null;
+        uiState.resultState.phase = "summary";
+        uiState.resultState.revealIndex = 1;
+        clearRevealTimer();
+        refreshUi();
+      }, 1680),
+    ];
+  }
+
+  function openResultPresentationByCount(items: ResultUiItem[]) {
+    const isSingleMode = uiState.winnerCount === 1;
+    if (isSingleMode && items.length === 1) {
+      uiState.resultState = {
+        open: true,
+        phase: "countdown",
+        countdownValue: 3,
+        revealIndex: 0,
+        requestedCount: uiState.winnerCount,
+        effectiveCount: items.length,
+        items,
+      };
+      startSingleResultCountdown();
+      return;
+    }
+    uiState.resultState = {
+      open: true,
+      phase: "summary",
+      countdownValue: null,
+      revealIndex: items.length,
+      requestedCount: uiState.winnerCount,
+      effectiveCount: items.length,
+      items,
+    };
+    clearRevealTimer();
+  }
+
+  function forceOpenResultSummary() {
+    if (!uiState.resultState.items.length) return;
+    clearRevealTimer();
+    uiState.resultState.phase = "summary";
+    uiState.resultState.countdownValue = null;
+    uiState.resultState.revealIndex = uiState.resultState.effectiveCount;
+  }
+
+  function skipResultCountdown() {
+    if (uiState.resultState.phase !== "countdown") return;
+    forceOpenResultSummary();
+  }
+
+  function hasCountdownRunning() {
+    return uiState.resultState.phase === "countdown" && uiState.resultState.countdownValue != null;
+  }
+
+  function maybeContinueSingleResultCountdownOnOpen() {
+    if (!hasCountdownRunning()) return;
+    if (!uiState.resultState.open) return;
+    if (revealTimerIds.length) return;
+    const current = Math.max(1, Math.min(3, Number(uiState.resultState.countdownValue) || 3));
+    const steps = current === 3 ? [2, 1] : current === 2 ? [1] : [];
+    const baseDelay = 560;
+    let acc = 0;
+    revealTimerIds = steps.map((value) => {
+      acc += baseDelay;
+      return window.setTimeout(() => {
+        uiState.resultState.countdownValue = value;
+        refreshUi();
+      }, acc);
+    });
+    revealTimerIds.push(
+      window.setTimeout(() => {
+        uiState.resultState.countdownValue = null;
+        uiState.resultState.phase = "summary";
+        uiState.resultState.revealIndex = uiState.resultState.effectiveCount;
+        clearRevealTimer();
+        refreshUi();
+      }, acc + baseDelay)
+    );
+  }
+
+  function prepareAndOpenResultReveal() {
+    if (!state.totalToDrop || !state.finished.length) return;
+    const selected = selectLastFinishers(state.finished, uiState.winnerCount, state.totalToDrop);
+    const items = mapFinishedToResultItems(selected);
+    openResultPresentationByCount(items);
+    if (!items.length) return;
+    playWinnerFanfare();
+  }
+
+  function getLiveCatalogForDraft() {
+    return cloneCatalogForDraft(catalogController.getCatalog() as unknown[]);
+  }
+
+  function ensureSettingsDraft() {
+    if (!uiState.settingsDraft) {
+      uiState.settingsDraft = getLiveCatalogForDraft();
+    }
+    return uiState.settingsDraft;
+  }
+
+  function recalcSettingsDirty() {
+    if (!uiState.settingsDraft) {
+      uiState.settingsDirty = false;
+      return;
+    }
+    uiState.settingsDirty =
+      catalogFingerprint(uiState.settingsDraft) !== catalogFingerprint(getLiveCatalogForDraft());
+  }
+
+  function closeSettingsEditor() {
+    uiState.settingsOpen = false;
+    uiState.settingsDirty = false;
+    uiState.settingsConfirmOpen = false;
+    uiState.settingsDraft = null;
   }
 
   refreshUi = () => {
     const total = getTotalSelectedCount(state);
     const inRun = state.mode === "playing" && !state.winner;
+    const remainingToFinish = inRun ? Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length) : 0;
     const view = renderer.getViewState?.();
+    const visibleCatalog = uiState.settingsOpen ? ensureSettingsDraft() : getLiveCatalogForDraft();
+    const winnerCountMax = getWinnerCountMax();
+    const clampedWinnerCount = clampResultCount(uiState.winnerCount, winnerCountMax);
+    if (clampedWinnerCount !== uiState.winnerCount) {
+      uiState.winnerCount = clampedWinnerCount;
+    }
+    const statusTone =
+      state.mode !== "playing"
+        ? "ready"
+        : state.winner
+          ? "done"
+          : state.paused
+            ? "paused"
+            : "running";
+    const statusLabel =
+      statusTone === "running"
+        ? "진행 중"
+        : statusTone === "paused"
+          ? "일시 정지"
+          : statusTone === "done"
+            ? "결과 준비 완료"
+            : "준비됨";
 
     const nextSnapshot: UiSnapshot = {
       startDisabled: total <= 0,
-      startLabel: inRun ? "게임 재시작" : "게임 시작",
+      startLabel: inRun ? "다시 시작" : "게임 시작",
       pauseDisabled: !inRun,
       pauseLabel: state.paused ? "이어하기" : "일시정지",
       pausePressed: !!state.paused,
+      statusLabel,
+      statusTone,
+      lastFewRemaining: remainingToFinish > 0 && remainingToFinish <= 3 ? remainingToFinish : 0,
       viewLockChecked: !!viewState.tailFocusOn,
       viewLockDisabled: !(state.mode === "playing" && state.released && view),
-      winnerDisabled: !uiState.winnerPayload,
-      winnerOpen: uiState.winnerOpen,
-      winnerPayload: uiState.winnerPayload,
+      resultDisabled: uiState.resultState.items.length <= 0,
+      winnerCount: uiState.winnerCount,
+      winnerCountMax,
+      winnerCountWasClamped: uiState.winnerCountWasClamped,
+      resultState: {
+        open: uiState.resultState.open,
+        phase: uiState.resultState.phase,
+        countdownValue: uiState.resultState.countdownValue,
+        revealIndex: uiState.resultState.revealIndex,
+        requestedCount: uiState.resultState.requestedCount,
+        effectiveCount: uiState.resultState.effectiveCount,
+        items: uiState.resultState.items.map((item) => ({ ...item })),
+      },
       settingsOpen: uiState.settingsOpen,
+      settingsDirty: uiState.settingsDirty,
+      settingsConfirmOpen: uiState.settingsConfirmOpen,
       bgmOn: audioController.isOn(),
       bgmTrack: audioController.getTrack(),
       inquiryOpen: uiState.inquiryOpen,
       inquirySubmitting: uiState.inquirySubmitting,
       inquiryStatus: uiState.inquiryStatus,
       inquiryForm: { ...uiState.inquiryForm },
-      balls: catalogController.getCatalog().map((ball: any) => ({
+      balls: visibleCatalog.map((ball: CatalogDraftItem) => ({
         id: ball.id,
         name: ball.name,
         imageDataUrl: ball.imageDataUrl,
-        count: getBallCount(state, ball.id),
+        count: Number.isFinite(state.counts?.[ball.id])
+          ? Math.max(0, Math.min(99, Number(state.counts[ball.id]) || 0))
+          : 1,
         locked: isBallControlLocked(),
       })),
     };
@@ -204,30 +529,22 @@ export function bootstrapGameApp() {
       refreshUi();
     },
     onReset: () => {
-      uiState.winnerOpen = false;
-      uiState.winnerPayload = null;
+      uiState.winnerCountWasClamped = false;
+      resetResultHistory();
       refreshUi();
     },
     onUpdateControls: refreshUi,
-    getWinnerPayload: getWinnerPayloadFromState,
-    onWinnerPayload: (payload: WinnerPayload) => {
-      uiState.winnerPayload = payload;
-      refreshUi();
-    },
     onShowWinner: () => {
-      if (!uiState.winnerPayload) {
-        uiState.winnerPayload = getWinnerPayloadFromState();
-      }
-      if (uiState.winnerPayload) {
-        playWinnerFanfare();
-        uiState.winnerOpen = true;
-      }
+      prepareAndOpenResultReveal();
       refreshUi();
     },
   });
 
   setUiActions({
     handleStartClick: () => {
+      closeResultModalPresentation();
+      resetResultHistory();
+      uiState.winnerCountWasClamped = false;
       sessionController.handleStartClick();
       refreshUi();
     },
@@ -235,57 +552,149 @@ export function bootstrapGameApp() {
       sessionController.togglePause();
       refreshUi();
     },
+    setWinnerCount: (nextValue) => {
+      if (isBallControlLocked()) return;
+      const raw = Math.floor(Number(nextValue) || 1);
+      const max = getWinnerCountMax();
+      const clamped = clampResultCount(raw, max);
+      uiState.winnerCount = clamped;
+      uiState.winnerCountWasClamped = raw !== clamped;
+      refreshUi();
+    },
     openSettings: () => {
       uiState.settingsOpen = true;
+      uiState.settingsDirty = false;
+      uiState.settingsConfirmOpen = false;
+      uiState.settingsDraft = getLiveCatalogForDraft();
       refreshUi();
     },
     closeSettings: () => {
-      uiState.settingsOpen = false;
+      if (!uiState.settingsOpen) return;
+      if (uiState.settingsDirty) {
+        uiState.settingsOpen = false;
+        uiState.settingsConfirmOpen = true;
+        refreshUi();
+        return;
+      }
+      closeSettingsEditor();
+      refreshUi();
+    },
+    applySettings: () => {
+      if (!uiState.settingsOpen || !uiState.settingsDraft || !uiState.settingsDirty) return false;
+      const changed = catalogController.replaceCatalog(uiState.settingsDraft);
+      uiState.settingsDraft = getLiveCatalogForDraft();
+      uiState.settingsDirty = false;
+      uiState.settingsConfirmOpen = false;
+      refreshUi();
+      return !!changed;
+    },
+    confirmDiscardSettings: () => {
+      closeSettingsEditor();
+      refreshUi();
+    },
+    cancelDiscardSettings: () => {
+      if (!uiState.settingsConfirmOpen) return;
+      uiState.settingsConfirmOpen = false;
+      uiState.settingsOpen = true;
       refreshUi();
     },
     addCatalogBall: () => {
-      if (isBallControlLocked()) return false;
-      const changed = catalogController.addNextBall();
+      if (!uiState.settingsOpen || isBallControlLocked()) return false;
+      const draft = ensureSettingsDraft();
+      if (draft.length >= BALL_LIBRARY.length) return false;
+      const used = new Set(draft.map((ball) => ball.id));
+      const nextBall = BALL_LIBRARY.find((ball) => !used.has(ball.id));
+      if (!nextBall) return false;
+      uiState.settingsDraft = [...draft, structuredClone(nextBall)];
+      recalcSettingsDirty();
       refreshUi();
-      return changed;
+      return true;
     },
     removeCatalogBall: (ballId) => {
-      if (isBallControlLocked()) return false;
-      const changed = catalogController.removeBall(ballId);
+      if (!uiState.settingsOpen || isBallControlLocked()) return false;
+      const draft = ensureSettingsDraft();
+      if (draft.length <= 1) return false;
+      const next = draft.filter((ball) => ball.id !== ballId);
+      if (next.length === draft.length) return false;
+      uiState.settingsDraft = next;
+      recalcSettingsDirty();
       refreshUi();
-      return changed;
+      return true;
     },
     restoreDefaultCatalog: () => {
-      if (isBallControlLocked()) return false;
-      catalogController.restoreDefaults();
+      if (!uiState.settingsOpen || isBallControlLocked()) return false;
+      uiState.settingsDraft = structuredClone(DEFAULT_BALLS);
+      recalcSettingsDirty();
       refreshUi();
       return true;
     },
     setCatalogBallName: (ballId, name) => {
-      if (isBallControlLocked()) return false;
-      const changed = catalogController.updateBallName(ballId, name);
-      refreshUi();
-      return changed;
-    },
-    setCatalogBallImage: async (ballId, file) => {
-      if (isBallControlLocked()) return false;
-      if (!(file instanceof File)) return false;
-      const dataUrl = await fileToDataUrl(file);
-      const changed = catalogController.updateBallImage(ballId, dataUrl);
-      refreshUi();
-      return changed;
-    },
-    openWinner: () => {
-      if (!uiState.winnerPayload) {
-        uiState.winnerPayload = getWinnerPayloadFromState();
-      }
-      if (!uiState.winnerPayload) return false;
-      uiState.winnerOpen = true;
+      if (!uiState.settingsOpen || isBallControlLocked()) return false;
+      const draft = ensureSettingsDraft();
+      const idx = draft.findIndex((ball) => ball.id === ballId);
+      if (idx < 0) return false;
+      const target = draft[idx];
+      const nextName = sanitizeBallName(name, target.name);
+      if (nextName === target.name) return false;
+      const next = draft.slice();
+      next[idx] = { ...target, name: nextName };
+      uiState.settingsDraft = next;
+      recalcSettingsDirty();
       refreshUi();
       return true;
     },
-    closeWinner: () => {
-      uiState.winnerOpen = false;
+    setCatalogBallImage: async (ballId, file) => {
+      if (!uiState.settingsOpen || isBallControlLocked()) return false;
+      if (!(file instanceof File)) return false;
+      const dataUrl = await fileToDataUrl(file);
+      if (!isDataImageUrl(dataUrl)) return false;
+      const draft = ensureSettingsDraft();
+      const idx = draft.findIndex((ball) => ball.id === ballId);
+      if (idx < 0) return false;
+      const target = draft[idx];
+      if (target.imageDataUrl === dataUrl) return false;
+      const next = draft.slice();
+      next[idx] = { ...target, imageDataUrl: dataUrl };
+      uiState.settingsDraft = next;
+      recalcSettingsDirty();
+      refreshUi();
+      return true;
+    },
+    openResultModal: () => {
+      if (!uiState.resultState.items.length) return false;
+      uiState.resultState.open = true;
+      maybeContinueSingleResultCountdownOnOpen();
+      refreshUi();
+      return true;
+    },
+    closeResultModal: () => {
+      closeResultModalPresentation();
+      refreshUi();
+    },
+    skipResultReveal: () => {
+      if (uiState.resultState.phase === "countdown") {
+        skipResultCountdown();
+      } else if (uiState.resultState.phase === "revealing") {
+        forceOpenResultSummary();
+      } else {
+        return;
+      }
+      refreshUi();
+    },
+    copyResults: async () => {
+      const text = toResultCopyText(uiState.resultState.items);
+      if (!text) return false;
+      const copied = await copyTextWithFallback(text);
+      if (copied) showInquiryToast("결과를 복사했습니다.", "success", 1800);
+      else showInquiryToast("결과 복사에 실패했습니다.", "error", 2200);
+      refreshUi();
+      return copied;
+    },
+    restartFromResult: () => {
+      closeResultModalPresentation();
+      resetResultHistory();
+      uiState.winnerCountWasClamped = false;
+      sessionController.handleStartClick();
       refreshUi();
     },
     openInquiry: () => {
@@ -375,12 +784,14 @@ export function bootstrapGameApp() {
       if (isBallControlLocked()) return;
       setBallCount(state, ballId, nextValue);
       catalogController.saveCounts(state.counts || {});
+      uiState.winnerCountWasClamped = false;
       refreshUi();
     },
     adjustBallCount: (ballId, delta) => {
       if (isBallControlLocked()) return;
       setBallCount(state, ballId, getBallCount(state, ballId) + delta);
       catalogController.saveCounts(state.counts || {});
+      uiState.winnerCountWasClamped = false;
       refreshUi();
     },
   });
@@ -429,6 +840,11 @@ export function bootstrapGameApp() {
     updateControls: refreshUi,
   });
 
+  const onPageHide = () => {
+    clearRevealTimer();
+  };
+  window.addEventListener("pagehide", onPageHide);
+
   loopController.startAnimationLoop();
 
   audioController.restoreFromStorage();
@@ -436,5 +852,9 @@ export function bootstrapGameApp() {
 
   return {
     refreshUi,
+    dispose: () => {
+      clearRevealTimer();
+      window.removeEventListener("pagehide", onPageHide);
+    },
   };
 }

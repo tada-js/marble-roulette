@@ -14,8 +14,12 @@ import {
   type RequiredInquiryField,
   type UiActions,
 } from "../app/ui-store";
-import { Button, IconButton } from "./components/button";
+import { Button } from "./components/button";
+import { GameCanvasStage } from "./components/game-canvas-stage";
+import { LeftPanel } from "./components/left-panel";
 import { ModalCard } from "./components/modal";
+import { ResultModal } from "./components/modals/result-modal";
+import { TopBar } from "./components/top-bar";
 
 const CATALOG_MAX = 15;
 
@@ -61,11 +65,14 @@ export function AppShell() {
   const ui = useUiSnapshot();
   const [bgmMenuOpen, setBgmMenuOpen] = useState(false);
   const [fileNames, setFileNames] = useState<Record<string, string>>(() => ({}));
+  const [countdownValue, setCountdownValue] = useState<number | null>(null);
 
   const settingsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const settingsConfirmDialogRef = useRef<HTMLDialogElement | null>(null);
   const inquiryDialogRef = useRef<HTMLDialogElement | null>(null);
-  const winnerDialogRef = useRef<HTMLDialogElement | null>(null);
+  const resultDialogRef = useRef<HTMLDialogElement | null>(null);
   const bgmControlRef = useRef<HTMLDivElement | null>(null);
+  const countdownTimersRef = useRef<number[]>([]);
 
   const inquiryNameRef = useRef<HTMLInputElement | null>(null);
   const inquiryEmailRef = useRef<HTMLInputElement | null>(null);
@@ -83,8 +90,45 @@ export function AppShell() {
   }
 
   useDialogSync(settingsDialogRef, !!ui.settingsOpen, () => runAction("closeSettings"));
+  useDialogSync(settingsConfirmDialogRef, !!ui.settingsConfirmOpen, () => {});
   useDialogSync(inquiryDialogRef, !!ui.inquiryOpen, () => runAction("closeInquiry"));
-  useDialogSync(winnerDialogRef, !!ui.winnerOpen, () => runAction("closeWinner"));
+  useDialogSync(resultDialogRef, !!ui.resultState.open, () => runAction("closeResultModal"));
+
+  function clearCountdownTimers() {
+    for (const timerId of countdownTimersRef.current) window.clearTimeout(timerId);
+    countdownTimersRef.current = [];
+  }
+
+  function triggerStartNow() {
+    clearCountdownTimers();
+    setCountdownValue(null);
+    runAction("handleStartClick");
+  }
+
+  function startGameCountdown() {
+    if (countdownValue != null) return;
+    clearCountdownTimers();
+    setCountdownValue(3);
+    countdownTimersRef.current.push(
+      window.setTimeout(() => setCountdownValue(2), 900),
+      window.setTimeout(() => setCountdownValue(1), 1800),
+      window.setTimeout(() => triggerStartNow(), 2700)
+    );
+  }
+
+  function handleTopBarStart() {
+    startGameCountdown();
+  }
+
+  function handleResultRestart() {
+    runAction("closeResultModal");
+    startGameCountdown();
+  }
+
+  function skipCountdown() {
+    if (countdownValue == null) return;
+    triggerStartNow();
+  }
 
   useEffect(() => {
     if (!bgmMenuOpen) return;
@@ -123,6 +167,8 @@ export function AppShell() {
     return () => clearTimeout(t);
   }, [ui.inquiryOpen]);
 
+  useEffect(() => () => clearCountdownTimers(), []);
+
   function focusInquiryField(field: RequiredInquiryField) {
     const map = {
       name: inquiryNameRef.current,
@@ -150,208 +196,54 @@ export function AppShell() {
   const catalogLocked = !!ui.balls.find((ball) => ball.locked);
   const canAddCatalogBall = ui.balls.length < CATALOG_MAX && !catalogLocked;
   const canRemoveCatalogBall = ui.balls.length > 1 && !catalogLocked;
-  const winner = ui.winnerPayload || null;
+  const canApplySettings = !!ui.settingsDirty && !catalogLocked;
+  const settingsCloseLabel = ui.settingsDirty ? "취소" : "닫기";
+  const isDev = import.meta.env.DEV;
 
   return (
     <>
       <div id="app">
-        <header className="topbar">
-          <div className="topbar__left brand">
-            <div className="brand__title">데구르르 (Degururu)</div>
-            <div className="brand__subtitle">공으로 즐기는 핀볼 사다리</div>
-          </div>
-
-          <div className="topbar__center">
-            <Button
-              id="start-btn"
-              variant="primary"
-              className="topbar__start"
-              disabled={ui.startDisabled}
-              onClick={() => runAction("handleStartClick")}
-            >
-              {ui.startLabel}
-            </Button>
-            <Button
-              id="pause-btn"
-              variant="ghost"
-              className="topbar__pause"
-              disabled={ui.pauseDisabled}
-              ariaPressed={ui.pausePressed}
-              onClick={() => runAction("togglePause")}
-            >
-              {ui.pauseLabel}
-            </Button>
-          </div>
-
-          <div className="topbar__right">
-            <div className="bgmControl" ref={bgmControlRef}>
-              <Button
-                id="bgm-btn"
-                variant="ghost"
-                size="md"
-                className="bgmControl__toggle"
-                ariaPressed={ui.bgmOn}
-                onClick={() => runAction("toggleBgm")}
-              >
-                <span data-bgm-label>{ui.bgmOn ? "BGM 켬" : "BGM 끔"}</span>
-              </Button>
-
-              <IconButton
-                id="bgm-settings-btn"
-                className="bgmControl__gear"
-                ariaLabel="BGM 트랙 선택"
-                ariaHasPopup="menu"
-                ariaExpanded={bgmMenuOpen}
-                title="BGM 선택"
-                onClick={() => setBgmMenuOpen((prev) => !prev)}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M19.43 12.98a7.83 7.83 0 0 0 .06-.98 7.83 7.83 0 0 0-.06-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.14 7.14 0 0 0-1.69-.98l-.38-2.65A.5.5 0 0 0 14 1h-4a.5.5 0 0 0-.49.42l-.38 2.65c-.6.23-1.16.56-1.68.98l-2.5-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65A7.83 7.83 0 0 0 4.51 12c0 .33.02.66.06.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.5-1c.52.42 1.08.75 1.68.98l.38 2.65A.5.5 0 0 0 10 23h4a.5.5 0 0 0 .49-.42l.38-2.65c.6-.23 1.16-.56 1.69-.98l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z" />
-                </svg>
-              </IconButton>
-
-              <div id="bgm-menu" className="bgmMenu" role="menu" hidden={!bgmMenuOpen}>
-                <button
-                  type="button"
-                  className="bgmMenu__item"
-                  data-bgm-track="bgm_1"
-                  role="menuitemradio"
-                  aria-checked={ui.bgmTrack === "bgm_1" ? "true" : "false"}
-                  onClick={() => {
-                    runAction("setBgmTrack", "bgm_1");
-                    setBgmMenuOpen(false);
-                  }}
-                >
-                  BGM 1
-                </button>
-                <button
-                  type="button"
-                  className="bgmMenu__item"
-                  data-bgm-track="bgm_2"
-                  role="menuitemradio"
-                  aria-checked={ui.bgmTrack === "bgm_2" ? "true" : "false"}
-                  onClick={() => {
-                    runAction("setBgmTrack", "bgm_2");
-                    setBgmMenuOpen(false);
-                  }}
-                >
-                  BGM 2
-                </button>
-              </div>
-            </div>
-
-            <Button id="inquiry-btn" variant="ghost" onClick={() => runAction("openInquiry")}>
-              문의
-            </Button>
-          </div>
-        </header>
+        <TopBar
+          startDisabled={ui.startDisabled || countdownValue != null}
+          startLabel={countdownValue != null ? "준비 중..." : ui.startLabel}
+          statusLabel={ui.statusLabel}
+          statusTone={ui.statusTone}
+          bgmOn={ui.bgmOn}
+          bgmTrack={ui.bgmTrack}
+          bgmMenuOpen={bgmMenuOpen}
+          bgmControlRef={bgmControlRef}
+          onStart={handleTopBarStart}
+          onToggleBgm={() => runAction("toggleBgm")}
+          onToggleBgmMenu={() => setBgmMenuOpen((prev) => !prev)}
+          onSelectBgmTrack={(track) => {
+            runAction("setBgmTrack", track);
+            setBgmMenuOpen(false);
+          }}
+          onInquiry={() => runAction("openInquiry")}
+        />
 
         <main className="stage">
-          <div className="hud">
-            <div className="mini">
-              <div className="mini__row">
-                <div className="mini__title" id="minimap-title">
-                  미니맵
-                </div>
-                <label
-                  className="switch"
-                  title="켜면 후미 공을 따라갑니다. 끄면 자유 시점으로 미니맵으로 이동합니다."
-                >
-                  <span className="switch__label">시점 고정</span>
-                  <input
-                    id="view-lock"
-                    className="switch__input"
-                    type="checkbox"
-                    role="switch"
-                    checked={ui.viewLockChecked}
-                    disabled={ui.viewLockDisabled}
-                    onChange={(event) => runAction("toggleViewLock", event.currentTarget.checked)}
-                  />
-                  <span className="switch__track" aria-hidden="true">
-                    <span className="switch__thumb"></span>
-                  </span>
-                </label>
-              </div>
-              <canvas id="minimap" width="260" height="190"></canvas>
-              <div className="mini__hint" id="minimap-hint">
-                미니맵을 클릭해 이동. 후미 추적으로 자동 추적을 재개합니다.
-              </div>
-            </div>
-
-            <div className="hud__actions">
-              <Button id="settings-btn" variant="ghost" onClick={() => runAction("openSettings")}>
-                공 설정
-              </Button>
-              <Button
-                id="winner-btn"
-                variant="ghost"
-                disabled={ui.winnerDisabled}
-                onClick={() => runAction("openWinner")}
-              >
-                마지막 결과
-              </Button>
-            </div>
-
-            <div className="balls" id="balls">
-              {ui.balls.map((ball) => (
-                <div key={ball.id} className="ball-card" role="group">
-                  <div className="ball-thumb">
-                    <img alt={ball.name} src={ball.imageDataUrl} />
-                  </div>
-
-                  <div className="ball-meta">
-                    <div className="ball-name tooltip" data-tip={ball.name} aria-label={ball.name}>
-                      <span className="ball-name__text">{ball.name}</span>
-                    </div>
-                    <div className="ball-id">{ball.id}</div>
-                  </div>
-
-                  <div className="ball-qty">
-                    <Button
-                      variant="ghost"
-                      className="ball-qty__btn"
-                      disabled={ball.locked}
-                      onClick={() => runAction("adjustBallCount", ball.id, -1)}
-                    >
-                      -
-                    </Button>
-                    <input
-                      className="ball-qty__count"
-                      type="number"
-                      inputMode="numeric"
-                      min="0"
-                      max="99"
-                      step="1"
-                      value={String(ball.count)}
-                      aria-label={`${ball.name} 개수`}
-                      disabled={ball.locked}
-                      onChange={(event) => runAction("setBallCount", ball.id, Number(event.currentTarget.value))}
-                    />
-                    <Button
-                      variant="ghost"
-                      className="ball-qty__btn"
-                      disabled={ball.locked}
-                      onClick={() => runAction("adjustBallCount", ball.id, 1)}
-                    >
-                      +
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="board">
-            <canvas id="game" width="900" height="1350"></canvas>
-            <div className="board__coords">
-              <div className="board__coordText" id="canvas-coord-readout">
-                xFrac: -, yFrac: -
-              </div>
-              <Button id="canvas-coord-copy" variant="ghost" className="board__copy" disabled>
-                좌표 복사
-              </Button>
-            </div>
-          </div>
+          <LeftPanel
+            viewLockChecked={ui.viewLockChecked}
+            viewLockDisabled={ui.viewLockDisabled}
+            resultDisabled={ui.resultDisabled}
+            winnerCount={ui.winnerCount}
+            winnerCountMax={ui.winnerCountMax}
+            winnerCountWasClamped={ui.winnerCountWasClamped}
+            balls={ui.balls}
+            onOpenSettings={() => runAction("openSettings")}
+            onOpenResult={() => runAction("openResultModal")}
+            onToggleViewLock={(isOn) => runAction("toggleViewLock", isOn)}
+            onSetWinnerCount={(nextValue) => runAction("setWinnerCount", nextValue)}
+            onAdjustBallCount={(ballId, delta) => runAction("adjustBallCount", ballId, delta)}
+            onSetBallCount={(ballId, nextValue) => runAction("setBallCount", ballId, nextValue)}
+          />
+          <GameCanvasStage
+            isDev={isDev}
+            countdownValue={countdownValue}
+            onSkipCountdown={skipCountdown}
+            lastFewRemaining={ui.lastFewRemaining}
+          />
         </main>
       </div>
 
@@ -363,36 +255,60 @@ export function AppShell() {
           event.preventDefault();
           runAction("closeSettings");
         }}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          runAction("closeSettings");
+        }}
       >
         <form className="twModal" id="settings-form" onSubmit={(event) => event.preventDefault()}>
           <ModalCard
-            title="공 설정"
+            className="settingsModal twModal__card--scrollable"
+            size="lg"
+            title={
+              <span className="settingsTitle">
+                공 설정
+                {ui.settingsDirty ? <span className="settingsTitle__badge">변경됨</span> : null}
+              </span>
+            }
             description="공을 추가/삭제하고, 이름과 이미지를 바꿀 수 있어요."
             onClose={() => runAction("closeSettings")}
             footer={
-              <>
-                <Button
-                  id="add-ball"
-                  variant="ghost"
-                  type="button"
-                  disabled={!canAddCatalogBall}
-                  onClick={() => runAction("addCatalogBall")}
-                >
-                  공 추가
-                </Button>
-                <Button
-                  id="restore-defaults"
-                  variant="ghost"
-                  type="button"
-                  disabled={catalogLocked}
-                  onClick={() => runAction("restoreDefaultCatalog")}
-                >
-                  기본값 복원
-                </Button>
-                <Button variant="primary" type="button" onClick={() => runAction("closeSettings")}>
-                  닫기
-                </Button>
-              </>
+              <div className="settingsFooter">
+                <div className="settingsFooter__left">
+                  <Button
+                    id="add-ball"
+                    variant="ghost"
+                    type="button"
+                    disabled={!canAddCatalogBall}
+                    onClick={() => runAction("addCatalogBall")}
+                  >
+                    공 추가
+                  </Button>
+                  <Button
+                    id="restore-defaults"
+                    variant="ghost"
+                    type="button"
+                    disabled={catalogLocked}
+                    onClick={() => runAction("restoreDefaultCatalog")}
+                  >
+                    기본값 복원
+                  </Button>
+                </div>
+                <div className="settingsFooter__right">
+                  <Button
+                    id="apply-settings"
+                    variant="primary"
+                    type="button"
+                    disabled={!canApplySettings}
+                    onClick={() => runAction("applySettings")}
+                  >
+                    적용
+                  </Button>
+                  <Button id="close-settings" variant="ghost" type="button" onClick={() => runAction("closeSettings")}>
+                    {settingsCloseLabel}
+                  </Button>
+                </div>
+              </div>
             }
           >
             <div className="twList" id="settings-list">
@@ -400,68 +316,103 @@ export function AppShell() {
                 const fileInputId = `ball-file-${ball.id}`;
                 return (
                   <div className="twItem" key={ball.id}>
-                    <div className="twItem__thumb">
-                      <img alt={ball.name} src={ball.imageDataUrl} />
+                    <div className="twItem__head">
+                      <div className="twItem__thumb">
+                        <img alt={ball.name} src={ball.imageDataUrl} />
+                      </div>
+                      <div className="twItem__headMeta">
+                        <div className="twItem__headLabel">공 ID</div>
+                        <div className="twItem__idBadge">{ball.id}</div>
+                      </div>
                     </div>
-                    <div className="twItem__main">
-                      <div className="twItem__grid">
-                        <div className="field">
-                          <label htmlFor={`ball-name-${ball.id}`}>이름</label>
+                    <div className="twItem__grid">
+                      <div className="field twItem__field">
+                        <label htmlFor={`ball-name-${ball.id}`}>이름</label>
+                        <input
+                          id={`ball-name-${ball.id}`}
+                          type="text"
+                          value={ball.name}
+                          maxLength={40}
+                          disabled={catalogLocked}
+                          onChange={(event) => runAction("setCatalogBallName", ball.id, event.currentTarget.value)}
+                        />
+                      </div>
+                      <div className="field twItem__field">
+                        <label htmlFor={fileInputId}>이미지</label>
+                        <div className="fileRow">
+                          <label className="btn btn--ghost btn--md fileRow__btn" htmlFor={fileInputId}>
+                            파일 선택
+                          </label>
+                          <div className="fileRow__name">{fileNames[ball.id] || "선택 안 함"}</div>
                           <input
-                            id={`ball-name-${ball.id}`}
-                            type="text"
-                            value={ball.name}
-                            maxLength={40}
+                            id={fileInputId}
+                            className="fileRow__input"
+                            type="file"
+                            accept="image/*"
                             disabled={catalogLocked}
-                            onChange={(event) => runAction("setCatalogBallName", ball.id, event.currentTarget.value)}
+                            onChange={async (event) => {
+                              const file = event.currentTarget.files?.[0];
+                              setFileNames((prev) => ({
+                                ...prev,
+                                [ball.id]: file?.name ? file.name.slice(0, 32) : "선택 안 함",
+                              }));
+                              if (!file) return;
+                              await runAction("setCatalogBallImage", ball.id, file);
+                              event.currentTarget.value = "";
+                            }}
                           />
                         </div>
-                        <div className="field">
-                          <label htmlFor={fileInputId}>이미지</label>
-                          <div className="fileRow">
-                            <label className="btn btn--ghost btn--md fileRow__btn" htmlFor={fileInputId}>
-                              파일 선택
-                            </label>
-                            <div className="fileRow__name">{fileNames[ball.id] || "선택 안 함"}</div>
-                            <input
-                              id={fileInputId}
-                              className="fileRow__input"
-                              type="file"
-                              accept="image/*"
-                              disabled={catalogLocked}
-                              onChange={async (event) => {
-                                const file = event.currentTarget.files?.[0];
-                                setFileNames((prev) => ({
-                                  ...prev,
-                                  [ball.id]: file?.name ? file.name.slice(0, 32) : "선택 안 함",
-                                }));
-                                if (!file) return;
-                                await runAction("setCatalogBallImage", ball.id, file);
-                                event.currentTarget.value = "";
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="field">
-                          <label>ID (고정)</label>
-                          <input type="text" value={ball.id} disabled />
-                        </div>
                       </div>
-                      <div className="twItem__actions">
-                        <Button
-                          variant="danger"
-                          className="twItem__remove"
-                          disabled={!canRemoveCatalogBall}
-                          onClick={() => runAction("removeCatalogBall", ball.id)}
-                        >
-                          삭제
-                        </Button>
-                      </div>
+                    </div>
+                    <div className="twItem__actions">
+                      <Button
+                        variant="danger"
+                        className="twItem__remove"
+                        disabled={!canRemoveCatalogBall}
+                        onClick={() => runAction("removeCatalogBall", ball.id)}
+                      >
+                        삭제
+                      </Button>
                     </div>
                   </div>
                 );
               })}
             </div>
+          </ModalCard>
+        </form>
+      </dialog>
+
+      <dialog
+        id="settings-confirm-dialog"
+        className="dialog dialog--settings"
+        ref={settingsConfirmDialogRef}
+        onCancel={(event) => {
+          event.preventDefault();
+          runAction("cancelDiscardSettings");
+        }}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          runAction("cancelDiscardSettings");
+        }}
+      >
+        <form className="twModal" id="settings-confirm-form" onSubmit={(event) => event.preventDefault()}>
+          <ModalCard
+            className="settingsConfirm"
+            size="sm"
+            title="설정을 취소하시겠습니까?"
+            onClose={() => runAction("cancelDiscardSettings")}
+            footer={
+              <div className="settingsConfirm__actions">
+                <Button width="md" variant="ghost" type="button" onClick={() => runAction("cancelDiscardSettings")}>
+                  아니오
+                </Button>
+                <Button width="md" variant="danger" type="button" onClick={() => runAction("confirmDiscardSettings")}>
+                  예
+                </Button>
+              </div>
+            }
+          >
+            {null}
           </ModalCard>
         </form>
       </dialog>
@@ -477,6 +428,7 @@ export function AppShell() {
       >
         <form className="twModal" id="inquiry-form" onSubmit={handleInquirySubmit}>
           <ModalCard
+            size="md"
             title="문의하기"
             description="문의 내용을 안전하게 전송합니다."
             onClose={() => runAction("closeInquiry")}
@@ -569,37 +521,26 @@ export function AppShell() {
       </dialog>
 
       <dialog
-        id="winner-dialog"
+        id="result-dialog"
         className="dialog dialog--winner"
-        ref={winnerDialogRef}
+        ref={resultDialogRef}
         onCancel={(event) => {
           event.preventDefault();
-          runAction("closeWinner");
+          runAction("closeResultModal");
+        }}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          runAction("closeResultModal");
         }}
       >
-        <form className="twModal" id="winner-form" onSubmit={(event) => event.preventDefault()}>
-          <ModalCard
-            title="마지막 결과"
-            description="마지막으로 도착한 공을 확인하세요."
-            onClose={() => runAction("closeWinner")}
-            footer={
-              <Button variant="primary" type="button" onClick={() => runAction("closeWinner")}>
-                확인
-              </Button>
-            }
-          >
-            <div className="twWinner">
-              <div className="twWinner__thumb">
-                <img id="winner-img" src={winner?.img || "data:,"} alt={winner?.name || ""} />
-              </div>
-              <div className="twWinner__copy">
-                <div className="twWinner__k">마지막 도착</div>
-                <div className="twWinner__v" id="winner-name">
-                  {winner?.name || "-"}
-                </div>
-              </div>
-            </div>
-          </ModalCard>
+        <form className="twModal" id="result-form" onSubmit={(event) => event.preventDefault()}>
+          <ResultModal
+            state={ui.resultState}
+            onClose={() => runAction("closeResultModal")}
+            onSkip={() => runAction("skipResultReveal")}
+            onCopy={() => runAction("copyResults")}
+            onRestart={handleResultRestart}
+          />
         </form>
       </dialog>
     </>

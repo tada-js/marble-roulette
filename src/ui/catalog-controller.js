@@ -156,6 +156,39 @@ export function createCatalogController(opts) {
   }
 
   /**
+   * Replace entire catalog from external draft (used by settings "Apply").
+   *
+   * @param {Array<{id?: unknown; name?: unknown; imageDataUrl?: unknown; tint?: unknown}>} nextInput
+   */
+  function replaceCatalog(nextInput) {
+    const libById = new Map(BALL_LIBRARY.map((b) => [b.id, b]));
+    const used = new Set();
+    const next = [];
+
+    for (const item of Array.isArray(nextInput) ? nextInput : []) {
+      const id = String(item?.id || "");
+      if (!id || used.has(id)) continue;
+      const lib = libById.get(id);
+      if (!lib) continue;
+      used.add(id);
+
+      next.push({
+        id,
+        name: sanitizeName(item?.name, lib.name),
+        imageDataUrl: isDataImageUrl(item?.imageDataUrl) ? item.imageDataUrl : lib.imageDataUrl,
+        tint: typeof item?.tint === "string" ? item.tint : lib.tint,
+      });
+    }
+
+    if (!next.length) return false;
+    if (JSON.stringify(next) === JSON.stringify(catalog)) return false;
+
+    saveBallsCatalog(next);
+    setCatalog(next);
+    return true;
+  }
+
+  /**
    * @param {string | undefined} ballId
    */
   function getWinnerPayload(ballId) {
@@ -176,6 +209,7 @@ export function createCatalogController(opts) {
     updateBallName,
     updateBallImage,
     restoreDefaults,
+    replaceCatalog,
     getCatalogMax: () => BALL_LIBRARY.length,
     isAtMax: () => catalog.length >= BALL_LIBRARY.length,
     getWinnerPayload,

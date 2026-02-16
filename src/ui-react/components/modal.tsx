@@ -1,14 +1,17 @@
 import type { ReactNode } from "react";
 import { IconButton } from "./button";
 
+type ModalCardSize = "sm" | "md" | "lg" | "xl";
+
 type ModalCardProps = {
-  title: string;
+  title: ReactNode;
   description?: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
   closeLabel?: string;
+  size?: ModalCardSize;
 };
 
 /**
@@ -23,10 +26,20 @@ export function ModalCard(props: ModalCardProps) {
     footer,
     className = "",
     closeLabel = "닫기",
+    size = "lg",
   } = props;
 
+  const sizeClass =
+    size === "sm"
+      ? "twModal__card--sm"
+      : size === "md"
+        ? "twModal__card--md"
+        : size === "xl"
+          ? "twModal__card--xl"
+          : "twModal__card--lg";
+
   return (
-    <div className={`twModal__card ${className}`.trim()}>
+    <div className={`twModal__card ${sizeClass} ${className}`.trim()}>
       <div className="twModal__header">
         <div className="twModal__headText">
           <div className="twModal__title">{title}</div>

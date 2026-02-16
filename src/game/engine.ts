@@ -512,6 +512,9 @@ export function dropAll(state: GameState): number | null {
   // When many marbles spawn overlapping, they can get violently separated on the first frame.
   // Pre-settle a bit against walls to keep them inside the playfield.
   settleMarbles(state, 3);
+  // Add a short deterministic "mix kick" at release so marbles interact early
+  // instead of falling in near-parallel lines.
+  applyReleaseMixKick(state);
   return n;
 }
 
@@ -895,6 +898,24 @@ function layoutPending(state: GameState): void {
     } else {
       state.pending[i].x = clamp(desiredX, ballR + 2, worldW - ballR - 2);
     }
+  }
+}
+
+function applyReleaseMixKick(state: GameState): void {
+  const marbles = state.marbles;
+  if (marbles.length <= 1) return;
+
+  const centerX = state.dropX;
+  for (const m of marbles) {
+    if (m.done) continue;
+    const h = hash01(`${m.id}/release`);
+    const jitter = h - 0.5;
+    const towardCenter = clamp((centerX - m.x) / Math.max(1, m.r * 2.35), -1.25, 1.25);
+
+    // Pull both sides slightly toward center with seeded asymmetry.
+    // This creates early marble-marble contacts right after release.
+    m.vx += towardCenter * 96 + jitter * 26;
+    m.vy += 18 + Math.abs(jitter) * 16;
   }
 }
 

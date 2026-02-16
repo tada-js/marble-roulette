@@ -22,7 +22,12 @@ function App() {
 
     if (window.__degururuBootstrapped__) return;
     window.__degururuBootstrapped__ = true;
-    bootstrapGameApp();
+    const app = bootstrapGameApp();
+
+    return () => {
+      app?.dispose?.();
+      window.__degururuBootstrapped__ = false;
+    };
   }, []);
 
   return <AppShell />;

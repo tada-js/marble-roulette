@@ -33,6 +33,38 @@ type BgCache = {
   patternSeed: number;
 };
 
+type TrailPoint = {
+  x: number;
+  y: number;
+  atMs: number;
+};
+
+type MotionCache = {
+  vx: number;
+  vy: number;
+  lastImpactMs: number;
+};
+
+type RingFx = {
+  x: number;
+  y: number;
+  startMs: number;
+  durationMs: number;
+  radiusFrom: number;
+  radiusTo: number;
+  color: [number, number, number];
+};
+
+type ParticleFx = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  startMs: number;
+  durationMs: number;
+  color: [number, number, number];
+};
+
 export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Board }): Renderer {
   const context = canvas.getContext("2d", { alpha: false });
   if (!(context instanceof CanvasRenderingContext2D)) throw new Error("2D context not available");
@@ -68,6 +100,21 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     gridPattern: null,
     patternSeed: 0,
   };
+  const trailsByMarble = new Map<string, TrailPoint[]>();
+  const motionByMarble = new Map<string, MotionCache>();
+  const impactRings: RingFx[] = [];
+  const impactParticles: ParticleFx[] = [];
+  const slotRipples: RingFx[] = [];
+  let seenFinishedCount = 0;
+
+  function clearRenderFxState() {
+    trailsByMarble.clear();
+    motionByMarble.clear();
+    impactRings.length = 0;
+    impactParticles.length = 0;
+    slotRipples.length = 0;
+    seenFinishedCount = 0;
+  }
 
   function resizeToFit(): void {
     const cssW = canvas.clientWidth || canvas.parentElement?.clientWidth || board.worldW;
@@ -256,11 +303,226 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     ctx.restore();
   }
 
+  function trackMarbleTrailsAndImpacts(state: GameState, nowMs: number): void {
+    const liveIds = new Set<string>();
+    const activeMarbles = state.marbles.filter((m) => !m.done);
+    const trailMaxPoints = activeMarbles.length > 60 ? 4 : 6;
+
+    for (const m of activeMarbles) {
+      liveIds.add(m.id);
+      const prev = motionByMarble.get(m.id);
+      if (prev) {
+        const prevSpeed = Math.hypot(prev.vx, prev.vy);
+        const speed = Math.hypot(m.vx, m.vy);
+        if (prevSpeed > 95 && speed > 95) {
+          const dotNorm = (prev.vx * m.vx + prev.vy * m.vy) / Math.max(1e-6, prevSpeed * speed);
+          const deltaV = Math.hypot(m.vx - prev.vx, m.vy - prev.vy);
+          if ((dotNorm < 0.52 || deltaV > 220) && nowMs - prev.lastImpactMs > 95) {
+            spawnImpactFx(m.x, m.y, nowMs);
+            prev.lastImpactMs = nowMs;
+          }
+        }
+      }
+      motionByMarble.set(m.id, {
+        vx: m.vx,
+        vy: m.vy,
+        lastImpactMs: prev?.lastImpactMs || 0,
+      });
+
+      let trail = trailsByMarble.get(m.id);
+      if (!trail) {
+        trail = [];
+        trailsByMarble.set(m.id, trail);
+      }
+      const last = trail[trail.length - 1];
+      const dx = last ? m.x - last.x : 999;
+      const dy = last ? m.y - last.y : 999;
+      if (!last || dx * dx + dy * dy >= 16 || nowMs - last.atMs > 110) {
+        trail.push({ x: m.x, y: m.y, atMs: nowMs });
+      }
+      while (trail.length > trailMaxPoints) trail.shift();
+    }
+
+    for (const key of motionByMarble.keys()) {
+      if (!liveIds.has(key)) motionByMarble.delete(key);
+    }
+    for (const key of trailsByMarble.keys()) {
+      if (!liveIds.has(key)) trailsByMarble.delete(key);
+    }
+  }
+
+  function trackSlotRipples(state: GameState, nowMs: number): void {
+    if (state.finished.length < seenFinishedCount) seenFinishedCount = 0;
+    if (!state.finished.length) return;
+
+    for (let i = seenFinishedCount; i < state.finished.length; i++) {
+      const entry = state.finished[i];
+      const marble = state.marbles.find((x) => x.id === entry.marbleId);
+      const slot = state.board.slots[entry.slot];
+      const x = marble?.x ?? (slot ? (slot.x0 + slot.x1) * 0.5 : state.board.worldW * 0.5);
+      const y = marble?.y ?? state.board.worldH - state.board.slotH * 0.42;
+      slotRipples.push({
+        x,
+        y,
+        startMs: nowMs,
+        durationMs: 280,
+        radiusFrom: 10,
+        radiusTo: 54,
+        color: [69, 243, 195],
+      });
+      if (slotRipples.length > 48) slotRipples.splice(0, slotRipples.length - 48);
+    }
+    seenFinishedCount = state.finished.length;
+  }
+
+  function spawnImpactFx(x: number, y: number, nowMs: number): void {
+    const neonPalette: Array<[number, number, number]> = [
+      [0, 255, 255],   // cyan
+      [255, 0, 170],   // magenta
+      [123, 255, 84],  // lime
+    ];
+    const baseIndex = Math.abs(Math.floor(x * 0.017 + y * 0.013 + nowMs * 0.0009)) % neonPalette.length;
+    const ringColor = neonPalette[baseIndex];
+    const particleColor = neonPalette[(baseIndex + 1) % neonPalette.length];
+
+    impactRings.push({
+      x,
+      y,
+      startMs: nowMs,
+      durationMs: 190,
+      radiusFrom: 8,
+      radiusTo: 42,
+      color: ringColor,
+    });
+    impactRings.push({
+      x,
+      y,
+      startMs: nowMs,
+      durationMs: 160,
+      radiusFrom: 3,
+      radiusTo: 20,
+      color: particleColor,
+    });
+    if (impactRings.length > 90) impactRings.splice(0, impactRings.length - 90);
+
+    for (let i = 0; i < 6; i++) {
+      const angle = ((i + 1) * Math.PI * 0.5) + ((x * 0.013 + y * 0.021 + nowMs * 0.0027) % (Math.PI * 2));
+      const speed = 92 + i * 28;
+      impactParticles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 20,
+        startMs: nowMs,
+        durationMs: 220,
+        color: particleColor,
+      });
+    }
+    if (impactParticles.length > 220) impactParticles.splice(0, impactParticles.length - 220);
+  }
+
+  function drawTrailFx(nowMs: number): void {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (const trail of trailsByMarble.values()) {
+      for (let i = 0; i < trail.length; i++) {
+        const p = trail[i];
+        const age = nowMs - p.atMs;
+        const life = 1 - clamp(age / 420, 0, 1);
+        if (life <= 0.02) continue;
+        const t = (i + 1) / Math.max(1, trail.length);
+        const alpha = (0.05 + 0.20 * t) * life;
+        const radius = 2.8 + 2.8 * t;
+        ctx.fillStyle = `rgba(196,245,255,${alpha.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawRingFx(list: RingFx[], nowMs: number, lineWidth = 2, baseAlpha = 0.36): void {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (let i = list.length - 1; i >= 0; i--) {
+      const fx = list[i];
+      const progress = clamp((nowMs - fx.startMs) / fx.durationMs, 0, 1);
+      if (progress >= 1) {
+        list.splice(i, 1);
+        continue;
+      }
+      const eased = 1 - (1 - progress) * (1 - progress);
+      const radius = lerp(fx.radiusFrom, fx.radiusTo, eased);
+      const alpha = Math.max(0, 1 - progress);
+      ctx.strokeStyle = `rgba(${fx.color[0]},${fx.color[1]},${fx.color[2]},${(baseAlpha * alpha).toFixed(3)})`;
+      ctx.lineWidth = lineWidth * (1 + (1 - progress) * 0.25);
+      ctx.shadowColor = `rgba(${fx.color[0]},${fx.color[1]},${fx.color[2]},${(0.55 * alpha).toFixed(3)})`;
+      ctx.shadowBlur = 12 + (1 - progress) * 10;
+      ctx.beginPath();
+      ctx.arc(fx.x, fx.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawParticleFx(nowMs: number): void {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (let i = impactParticles.length - 1; i >= 0; i--) {
+      const fx = impactParticles[i];
+      const progress = clamp((nowMs - fx.startMs) / fx.durationMs, 0, 1);
+      if (progress >= 1) {
+        impactParticles.splice(i, 1);
+        continue;
+      }
+      const tSec = (nowMs - fx.startMs) / 1000;
+      const x = fx.x + fx.vx * tSec;
+      const y = fx.y + fx.vy * tSec + 34 * tSec * tSec;
+      const alpha = Math.max(0, 1 - progress);
+      const size = 1.7 + (1 - progress) * 2.8;
+      ctx.shadowColor = `rgba(${fx.color[0]},${fx.color[1]},${fx.color[2]},${(0.72 * alpha).toFixed(3)})`;
+      ctx.shadowBlur = 10 + (1 - progress) * 8;
+      ctx.fillStyle = `rgba(${fx.color[0]},${fx.color[1]},${fx.color[2]},${(0.84 * alpha).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawLastFewHighlight(state: GameState, nowMs: number): void {
+    if (state.mode !== "playing" || state.winner) return;
+    const remaining = Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length);
+    if (remaining <= 0 || remaining > 3) return;
+
+    const pulse = 0.5 + 0.5 * Math.sin(nowMs / 220);
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (const m of state.marbles) {
+      if (m.done) continue;
+      ctx.shadowColor = `rgba(255,176,0,${(0.35 + pulse * 0.22).toFixed(3)})`;
+      ctx.shadowBlur = 16 + pulse * 8;
+      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = `rgba(255,210,130,${(0.32 + pulse * 0.34).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r + 7 + pulse * 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function draw(state: GameState, ballsCatalog: BallCatalogItem[], imagesById: Map<string, HTMLImageElement>): void {
     drawBoardBase(state.t || 0);
+    const nowMs = performance.now();
+    if (state.mode !== "playing" && !state.marbles.length && !state.finished.length) {
+      clearRenderFxState();
+    }
+    trackSlotRipples(state, nowMs);
+    trackMarbleTrailsAndImpacts(state, nowMs);
 
     // Shared FX time for hue cycling (keeps animating even when game is paused).
-    const fxT = ((performance.now() - bootMs) / 1000) + (state.t || 0);
+    const fxT = ((nowMs - bootMs) / 1000) + (state.t || 0);
 
     // Camera:
     // - manual: minimap / view lock can set cameraOverrideY (works even before starting).
@@ -550,6 +812,10 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
 
     // Drop guide removed (no click-to-set drop position).
 
+    // FX (behind marbles): trail + slot arrival ripple.
+    drawTrailFx(nowMs);
+    drawRingFx(slotRipples, nowMs, 2.2, 0.38);
+
     // Marbles (pending + active).
     for (const m of [...state.pending, ...state.marbles]) {
       // Hide finished marbles to avoid clutter when 100+ arrive.
@@ -629,6 +895,11 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
 
       ctx.restore();
     }
+
+    // FX (above marbles): impact pulses/particles + last few candidate highlight.
+    drawRingFx(impactRings, nowMs, 2.9, 0.72);
+    drawParticleFx(nowMs);
+    drawLastFewHighlight(state, nowMs);
 
     ctx.restore();
   }

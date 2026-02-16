@@ -10,10 +10,29 @@ export type InquiryForm = {
   [K in InquiryField]: string;
 };
 
-export type WinnerPayload = {
+export type ResultRevealPhase = "idle" | "countdown" | "revealing" | "summary";
+
+export type ResultUiItem = {
+  rank: number;
+  ballId: string;
   name: string;
   img: string;
+  finishedAt: number;
+  slot: number;
+  label: string;
 };
+
+export type ResultUiState = {
+  open: boolean;
+  phase: ResultRevealPhase;
+  countdownValue: number | null;
+  revealIndex: number;
+  requestedCount: number;
+  effectiveCount: number;
+  items: ReadonlyArray<ResultUiItem>;
+};
+
+export type StatusTone = "ready" | "running" | "paused" | "done";
 
 export type BallUiModel = {
   id: string;
@@ -33,12 +52,19 @@ export type UiSnapshot = {
   pauseDisabled: boolean;
   pauseLabel: string;
   pausePressed: boolean;
+  statusLabel: string;
+  statusTone: StatusTone;
+  lastFewRemaining: number;
   viewLockChecked: boolean;
   viewLockDisabled: boolean;
-  winnerDisabled: boolean;
-  winnerOpen: boolean;
-  winnerPayload: WinnerPayload | null;
+  resultDisabled: boolean;
+  winnerCount: number;
+  winnerCountMax: number;
+  winnerCountWasClamped: boolean;
+  resultState: ResultUiState;
   settingsOpen: boolean;
+  settingsDirty: boolean;
+  settingsConfirmOpen: boolean;
   bgmOn: boolean;
   bgmTrack: string;
   inquiryOpen: boolean;
@@ -51,15 +77,22 @@ export type UiSnapshot = {
 export type UiActions = {
   handleStartClick: () => void;
   togglePause: () => void;
+  setWinnerCount: (nextValue: number) => void;
   openSettings: () => void;
   closeSettings: () => void;
+  applySettings: () => boolean;
+  confirmDiscardSettings: () => void;
+  cancelDiscardSettings: () => void;
   addCatalogBall: () => boolean;
   removeCatalogBall: (ballId: string) => boolean;
   restoreDefaultCatalog: () => boolean;
   setCatalogBallName: (ballId: string, name: string) => boolean;
   setCatalogBallImage: (ballId: string, file: File) => Promise<boolean> | boolean;
-  openWinner: () => boolean;
-  closeWinner: () => void;
+  openResultModal: () => boolean;
+  closeResultModal: () => void;
+  skipResultReveal: () => void;
+  copyResults: () => Promise<boolean> | boolean;
+  restartFromResult: () => void;
   toggleBgm: () => void;
   setBgmTrack: (track: string) => void;
   toggleViewLock: (isOn: boolean) => void;
@@ -77,12 +110,27 @@ const DEFAULT_SNAPSHOT: UiSnapshot = Object.freeze({
   pauseDisabled: true,
   pauseLabel: "일시정지",
   pausePressed: false,
+  statusLabel: "준비됨",
+  statusTone: "ready",
+  lastFewRemaining: 0,
   viewLockChecked: true,
   viewLockDisabled: true,
-  winnerDisabled: true,
-  winnerOpen: false,
-  winnerPayload: null,
+  resultDisabled: true,
+  winnerCount: 1,
+  winnerCountMax: 1,
+  winnerCountWasClamped: false,
+  resultState: Object.freeze({
+    open: false,
+    phase: "idle",
+    countdownValue: null,
+    revealIndex: 0,
+    requestedCount: 1,
+    effectiveCount: 0,
+    items: Object.freeze([]),
+  }),
   settingsOpen: false,
+  settingsDirty: false,
+  settingsConfirmOpen: false,
   bgmOn: true,
   bgmTrack: "bgm_1",
   inquiryOpen: false,
@@ -106,15 +154,22 @@ let snapshot: UiSnapshot = DEFAULT_SNAPSHOT;
 let actions: UiActions = {
   handleStartClick: NOOP_VOID,
   togglePause: NOOP_VOID,
+  setWinnerCount: NOOP_VOID,
   openSettings: NOOP_VOID,
   closeSettings: NOOP_VOID,
+  applySettings: NOOP_FALSE,
+  confirmDiscardSettings: NOOP_VOID,
+  cancelDiscardSettings: NOOP_VOID,
   addCatalogBall: NOOP_FALSE,
   removeCatalogBall: NOOP_FALSE,
   restoreDefaultCatalog: NOOP_FALSE,
   setCatalogBallName: NOOP_FALSE,
   setCatalogBallImage: NOOP_FALSE,
-  openWinner: NOOP_FALSE,
-  closeWinner: NOOP_VOID,
+  openResultModal: NOOP_FALSE,
+  closeResultModal: NOOP_VOID,
+  skipResultReveal: NOOP_VOID,
+  copyResults: NOOP_FALSE,
+  restartFromResult: NOOP_VOID,
   toggleBgm: NOOP_VOID,
   setBgmTrack: NOOP_VOID,
   toggleViewLock: NOOP_VOID,
@@ -138,11 +193,18 @@ function isEqualSnapshot(a: UiSnapshot, b: UiSnapshot) {
     a.pauseDisabled !== b.pauseDisabled ||
     a.pauseLabel !== b.pauseLabel ||
     a.pausePressed !== b.pausePressed ||
+    a.statusLabel !== b.statusLabel ||
+    a.statusTone !== b.statusTone ||
+    a.lastFewRemaining !== b.lastFewRemaining ||
     a.viewLockChecked !== b.viewLockChecked ||
     a.viewLockDisabled !== b.viewLockDisabled ||
-    a.winnerDisabled !== b.winnerDisabled ||
-    a.winnerOpen !== b.winnerOpen ||
+    a.resultDisabled !== b.resultDisabled ||
+    a.winnerCount !== b.winnerCount ||
+    a.winnerCountMax !== b.winnerCountMax ||
+    a.winnerCountWasClamped !== b.winnerCountWasClamped ||
     a.settingsOpen !== b.settingsOpen ||
+    a.settingsDirty !== b.settingsDirty ||
+    a.settingsConfirmOpen !== b.settingsConfirmOpen ||
     a.bgmOn !== b.bgmOn ||
     a.bgmTrack !== b.bgmTrack ||
     a.inquiryOpen !== b.inquiryOpen ||
@@ -152,10 +214,34 @@ function isEqualSnapshot(a: UiSnapshot, b: UiSnapshot) {
     return false;
   }
 
-  const aWinner = a.winnerPayload;
-  const bWinner = b.winnerPayload;
-  if (!!aWinner !== !!bWinner) return false;
-  if (aWinner && bWinner && (aWinner.name !== bWinner.name || aWinner.img !== bWinner.img)) return false;
+  const aResult = a.resultState;
+  const bResult = b.resultState;
+  if (
+    aResult.open !== bResult.open ||
+    aResult.phase !== bResult.phase ||
+    aResult.countdownValue !== bResult.countdownValue ||
+    aResult.revealIndex !== bResult.revealIndex ||
+    aResult.requestedCount !== bResult.requestedCount ||
+    aResult.effectiveCount !== bResult.effectiveCount ||
+    aResult.items.length !== bResult.items.length
+  ) {
+    return false;
+  }
+  for (let i = 0; i < aResult.items.length; i++) {
+    const x = aResult.items[i];
+    const y = bResult.items[i];
+    if (
+      x.rank !== y.rank ||
+      x.ballId !== y.ballId ||
+      x.name !== y.name ||
+      x.img !== y.img ||
+      x.finishedAt !== y.finishedAt ||
+      x.slot !== y.slot ||
+      x.label !== y.label
+    ) {
+      return false;
+    }
+  }
 
   const aInquiry = a.inquiryForm;
   const bInquiry = b.inquiryForm;
