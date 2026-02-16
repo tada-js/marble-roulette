@@ -5,7 +5,7 @@ import path from "node:path";
 import { transformSync } from "esbuild";
 
 const root = path.resolve(new URL("..", import.meta.url).pathname);
-const exts = new Set([".js", ".mjs", ".jsx"]);
+const exts = new Set([".js", ".mjs", ".jsx", ".ts", ".tsx"]);
 
 function walk(dir, out) {
   for (const ent of readdirSync(dir)) {
@@ -24,9 +24,10 @@ let ok = true;
 for (const f of files) {
   try {
     const ext = path.extname(f);
-    if (ext === ".jsx") {
+    if (ext === ".jsx" || ext === ".tsx" || ext === ".ts") {
       const source = readFileSync(f, "utf8");
-      transformSync(source, { loader: "jsx", format: "esm" });
+      const loader = ext === ".jsx" ? "jsx" : ext === ".tsx" ? "tsx" : "ts";
+      transformSync(source, { loader, format: "esm" });
     } else {
       execFileSync(process.execPath, ["--check", f], { stdio: "pipe" });
     }

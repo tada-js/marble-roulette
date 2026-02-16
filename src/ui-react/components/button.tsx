@@ -1,23 +1,40 @@
+import type { AriaAttributes, MouseEventHandler, ReactNode } from "react";
+
+type ButtonVariant = "primary" | "ghost" | "danger" | "accent";
+type ButtonSize = "sm" | "md" | "lg";
+
+type ButtonProps = {
+  id?: string;
+  type?: "button" | "submit" | "reset";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+  disabled?: boolean;
+  title?: string;
+  ariaLabel?: string;
+  ariaPressed?: boolean;
+  ariaHasPopup?: AriaAttributes["aria-haspopup"];
+  ariaExpanded?: boolean;
+  onClick?: MouseEventHandler<HTMLButtonElement>;
+  children?: ReactNode;
+};
+
+type IconButtonProps = {
+  id?: string;
+  className?: string;
+  disabled?: boolean;
+  title?: string;
+  ariaLabel: string;
+  ariaHasPopup?: AriaAttributes["aria-haspopup"];
+  ariaExpanded?: boolean;
+  onClick?: MouseEventHandler<HTMLButtonElement>;
+  children?: ReactNode;
+};
+
 /**
  * Shared React button component using the project's CSS design tokens/variants.
- *
- * @param {{
- *   id?: string;
- *   type?: "button" | "submit" | "reset";
- *   variant?: "primary" | "ghost" | "danger" | "accent";
- *   size?: "sm" | "md" | "lg";
- *   className?: string;
- *   disabled?: boolean;
- *   title?: string;
- *   ariaLabel?: string;
- *   ariaPressed?: boolean;
- *   ariaHasPopup?: string;
- *   ariaExpanded?: boolean;
- *   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
- *   children?: import("react").ReactNode;
- * }} props
  */
-export function Button(props) {
+export function Button(props: ButtonProps) {
   const {
     id,
     type = "button",
@@ -64,20 +81,8 @@ export function Button(props) {
 
 /**
  * Icon-only button variant.
- *
- * @param {{
- *   id?: string;
- *   className?: string;
- *   disabled?: boolean;
- *   title?: string;
- *   ariaLabel: string;
- *   ariaHasPopup?: string;
- *   ariaExpanded?: boolean;
- *   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
- *   children?: import("react").ReactNode;
- * }} props
  */
-export function IconButton(props) {
+export function IconButton(props: IconButtonProps) {
   const {
     id,
     className = "",

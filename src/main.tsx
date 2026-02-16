@@ -1,7 +1,13 @@
 import { useLayoutEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { bootstrapGameApp } from "./app/create-game-app.js";
-import { AppShell } from "./ui-react/app-shell.jsx";
+import { bootstrapGameApp } from "./app/create-game-app";
+import { AppShell } from "./ui-react/app-shell";
+
+declare global {
+  interface Window {
+    __degururuBootstrapped__?: boolean;
+  }
+}
 
 /**
  * Root app entry for React-rendered UI shell.

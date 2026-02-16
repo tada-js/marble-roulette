@@ -17,6 +17,11 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Enable PR auto-merge (squash)
         env:
           GH_TOKEN: ${{ github.token }}

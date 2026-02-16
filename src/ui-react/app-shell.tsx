@@ -1,9 +1,55 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { getUiActions, getUiSnapshot, subscribeUi } from "../app/ui-store.js";
-import { Button, IconButton } from "./components/button.jsx";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type RefObject,
+} from "react";
+import {
+  getUiActions,
+  getUiSnapshot,
+  subscribeUi,
+  type InquirySubmitResult,
+  type RequiredInquiryField,
+  type UiActions,
+} from "../app/ui-store";
+import { Button, IconButton } from "./components/button";
+
+const CATALOG_MAX = 15;
 
 function useUiSnapshot() {
   return useSyncExternalStore(subscribeUi, getUiSnapshot, getUiSnapshot);
+}
+
+function useDialogSync(ref: RefObject<HTMLDialogElement | null>, isOpen: boolean, onClose: () => void) {
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (isOpen && !dialog.open) {
+      try {
+        dialog.showModal();
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    if (!isOpen && dialog.open) {
+      try {
+        dialog.close();
+      } catch {
+        // ignore
+      }
+    }
+  }, [ref, isOpen]);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    const onDialogClose = () => onClose();
+    dialog.addEventListener("close", onDialogClose);
+    return () => dialog.removeEventListener("close", onDialogClose);
+  }, [ref, onClose]);
 }
 
 /**
@@ -13,25 +59,43 @@ function useUiSnapshot() {
 export function AppShell() {
   const ui = useUiSnapshot();
   const [bgmMenuOpen, setBgmMenuOpen] = useState(false);
-  const bgmControlRef = useRef(null);
+  const [fileNames, setFileNames] = useState<Record<string, string>>(() => ({}));
+
+  const settingsDialogRef = useRef<HTMLDialogElement | null>(null);
+  const inquiryDialogRef = useRef<HTMLDialogElement | null>(null);
+  const winnerDialogRef = useRef<HTMLDialogElement | null>(null);
+  const bgmControlRef = useRef<HTMLDivElement | null>(null);
+
+  const inquiryNameRef = useRef<HTMLInputElement | null>(null);
+  const inquiryEmailRef = useRef<HTMLInputElement | null>(null);
+  const inquirySubjectRef = useRef<HTMLInputElement | null>(null);
+  const inquiryMessageRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function runAction<K extends keyof UiActions>(
+    key: K,
+    ...args: Parameters<UiActions[K]>
+  ): ReturnType<UiActions[K]> | undefined {
+    const actions = getUiActions() as UiActions;
+    const fn = actions[key] as unknown as ((...params: unknown[]) => ReturnType<UiActions[K]>) | undefined;
+    if (typeof fn === "function") return fn(...(args as unknown[]));
+    return undefined;
+  }
+
+  useDialogSync(settingsDialogRef, !!ui.settingsOpen, () => runAction("closeSettings"));
+  useDialogSync(inquiryDialogRef, !!ui.inquiryOpen, () => runAction("closeInquiry"));
+  useDialogSync(winnerDialogRef, !!ui.winnerOpen, () => runAction("closeWinner"));
 
   useEffect(() => {
     if (!bgmMenuOpen) return;
 
-    /**
-     * @param {PointerEvent} event
-     */
-    function onPointerDown(event) {
+    function onPointerDown(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (bgmControlRef.current?.contains(target)) return;
       setBgmMenuOpen(false);
     }
 
-    /**
-     * @param {KeyboardEvent} event
-     */
-    function onKeyDown(event) {
+    function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       setBgmMenuOpen(false);
     }
@@ -44,16 +108,48 @@ export function AppShell() {
     };
   }, [bgmMenuOpen]);
 
-  /**
-   * @template {keyof ReturnType<typeof getUiActions>} K
-   * @param {K} key
-   * @param {...Parameters<ReturnType<typeof getUiActions>[K]>} args
-   */
-  function runAction(key, ...args) {
-    const actions = getUiActions();
-    const fn = actions[key];
-    if (typeof fn === "function") fn(...args);
+  useEffect(() => {
+    if (!ui.inquiryOpen) return;
+    const t = setTimeout(() => {
+      const el = inquiryNameRef.current;
+      if (!el) return;
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        el.focus();
+      }
+    }, 10);
+    return () => clearTimeout(t);
+  }, [ui.inquiryOpen]);
+
+  function focusInquiryField(field: RequiredInquiryField) {
+    const map = {
+      name: inquiryNameRef.current,
+      email: inquiryEmailRef.current,
+      subject: inquirySubjectRef.current,
+      message: inquiryMessageRef.current,
+    };
+    const el = map[field];
+    if (!el) return;
+    try {
+      el.focus({ preventScroll: true });
+    } catch {
+      el.focus();
+    }
   }
+
+  async function handleInquirySubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const result = (await runAction("submitInquiry")) as InquirySubmitResult | undefined;
+    if (!result || result.ok) return;
+    if (result.field) focusInquiryField(result.field);
+  }
+
+  const inquiryMessageLength = Math.min(2000, String(ui.inquiryForm?.message || "").length);
+  const catalogLocked = !!ui.balls.find((ball) => ball.locked);
+  const canAddCatalogBall = ui.balls.length < CATALOG_MAX && !catalogLocked;
+  const canRemoveCatalogBall = ui.balls.length > 1 && !catalogLocked;
+  const winner = ui.winnerPayload || null;
 
   return (
     <>
@@ -142,7 +238,7 @@ export function AppShell() {
               </div>
             </div>
 
-            <Button id="inquiry-btn" variant="ghost">
+            <Button id="inquiry-btn" variant="ghost" onClick={() => runAction("openInquiry")}>
               문의
             </Button>
           </div>
@@ -257,31 +353,111 @@ export function AppShell() {
         </main>
       </div>
 
-      <dialog id="settings-dialog" className="dialog dialog--settings">
-        <form method="dialog" className="twModal" id="settings-form">
+      <dialog
+        id="settings-dialog"
+        className="dialog dialog--settings"
+        ref={settingsDialogRef}
+        onCancel={(event) => {
+          event.preventDefault();
+          runAction("closeSettings");
+        }}
+      >
+        <form className="twModal" id="settings-form" onSubmit={(event) => event.preventDefault()}>
           <div className="twModal__card">
             <div className="twModal__header">
               <div className="twModal__headText">
                 <div className="twModal__title">공 설정</div>
                 <div className="twModal__desc">공을 추가/삭제하고, 이름과 이미지를 바꿀 수 있어요.</div>
               </div>
-              <button className="twModal__close" value="close" type="submit" formNoValidate aria-label="닫기">
+              <button className="twModal__close" type="button" aria-label="닫기" onClick={() => runAction("closeSettings")}>
                 ×
               </button>
             </div>
 
             <div className="twModal__body">
-              <div className="twList" id="settings-list"></div>
+              <div className="twList" id="settings-list">
+                {ui.balls.map((ball) => {
+                  const fileInputId = `ball-file-${ball.id}`;
+                  return (
+                    <div className="twItem" key={ball.id}>
+                      <div className="twItem__thumb">
+                        <img alt={ball.name} src={ball.imageDataUrl} />
+                      </div>
+                      <div className="twItem__main">
+                        <div className="twItem__grid">
+                          <div className="field">
+                            <label htmlFor={`ball-name-${ball.id}`}>이름</label>
+                            <input
+                              id={`ball-name-${ball.id}`}
+                              type="text"
+                              value={ball.name}
+                              maxLength={40}
+                              disabled={catalogLocked}
+                              onChange={(event) => runAction("setCatalogBallName", ball.id, event.currentTarget.value)}
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={fileInputId}>이미지</label>
+                            <div className="fileRow">
+                              <label className="btn btn--ghost btn--md fileRow__btn" htmlFor={fileInputId}>
+                                파일 선택
+                              </label>
+                              <div className="fileRow__name">{fileNames[ball.id] || "선택 안 함"}</div>
+                              <input
+                                id={fileInputId}
+                                className="fileRow__input"
+                                type="file"
+                                accept="image/*"
+                                disabled={catalogLocked}
+                                onChange={async (event) => {
+                                  const file = event.currentTarget.files?.[0];
+                                  setFileNames((prev) => ({
+                                    ...prev,
+                                    [ball.id]: file?.name ? file.name.slice(0, 32) : "선택 안 함",
+                                  }));
+                                  if (!file) return;
+                                  await runAction("setCatalogBallImage", ball.id, file);
+                                  event.currentTarget.value = "";
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="field">
+                            <label>ID (고정)</label>
+                            <input type="text" value={ball.id} disabled />
+                          </div>
+                        </div>
+                        <div className="twItem__actions">
+                          <Button
+                            variant="danger"
+                            className="twItem__remove"
+                            disabled={!canRemoveCatalogBall}
+                            onClick={() => runAction("removeCatalogBall", ball.id)}
+                          >
+                            삭제
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="twModal__footer">
-              <Button id="add-ball" variant="ghost" type="button">
+              <Button id="add-ball" variant="ghost" type="button" disabled={!canAddCatalogBall} onClick={() => runAction("addCatalogBall")}>
                 공 추가
               </Button>
-              <Button id="restore-defaults" variant="ghost" type="button">
+              <Button
+                id="restore-defaults"
+                variant="ghost"
+                type="button"
+                disabled={catalogLocked}
+                onClick={() => runAction("restoreDefaultCatalog")}
+              >
                 기본값 복원
               </Button>
-              <Button variant="primary" type="submit">
+              <Button variant="primary" type="button" onClick={() => runAction("closeSettings")}>
                 닫기
               </Button>
             </div>
@@ -289,15 +465,23 @@ export function AppShell() {
         </form>
       </dialog>
 
-      <dialog id="inquiry-dialog" className="dialog dialog--settings">
-        <form method="dialog" className="twModal" id="inquiry-form">
+      <dialog
+        id="inquiry-dialog"
+        className="dialog dialog--settings"
+        ref={inquiryDialogRef}
+        onCancel={(event) => {
+          event.preventDefault();
+          runAction("closeInquiry");
+        }}
+      >
+        <form className="twModal" id="inquiry-form" onSubmit={handleInquirySubmit}>
           <div className="twModal__card">
             <div className="twModal__header">
               <div className="twModal__headText">
                 <div className="twModal__title">문의하기</div>
                 <div className="twModal__desc">문의 내용을 안전하게 전송합니다.</div>
               </div>
-              <button className="twModal__close" value="close" type="submit" formNoValidate aria-label="닫기">
+              <button className="twModal__close" type="button" aria-label="닫기" onClick={() => runAction("closeInquiry")}>
                 ×
               </button>
             </div>
@@ -310,10 +494,13 @@ export function AppShell() {
                     id="inq-name"
                     name="name"
                     type="text"
-                    maxLength="40"
+                    maxLength={40}
                     required
                     autoComplete="name"
                     placeholder="홍길동"
+                    value={ui.inquiryForm.name}
+                    ref={inquiryNameRef}
+                    onChange={(event) => runAction("setInquiryField", "name", event.currentTarget.value)}
                   />
                 </div>
                 <div className="field">
@@ -322,56 +509,90 @@ export function AppShell() {
                     id="inq-email"
                     name="email"
                     type="email"
-                    maxLength="120"
+                    maxLength={120}
                     required
                     autoComplete="email"
                     placeholder="you@example.com"
+                    value={ui.inquiryForm.email}
+                    ref={inquiryEmailRef}
+                    onChange={(event) => runAction("setInquiryField", "email", event.currentTarget.value)}
                   />
                 </div>
                 <div className="field">
                   <label htmlFor="inq-subject">제목</label>
-                  <input id="inq-subject" name="subject" type="text" maxLength="80" required placeholder="문의 제목" />
+                  <input
+                    id="inq-subject"
+                    name="subject"
+                    type="text"
+                    maxLength={80}
+                    required
+                    placeholder="문의 제목"
+                    value={ui.inquiryForm.subject}
+                    ref={inquirySubjectRef}
+                    onChange={(event) => runAction("setInquiryField", "subject", event.currentTarget.value)}
+                  />
                 </div>
                 <div className="field">
                   <label htmlFor="inq-message">내용</label>
                   <textarea
                     id="inq-message"
                     name="message"
-                    rows="6"
-                    maxLength="2000"
+                    rows={6}
+                    maxLength={2000}
                     required
                     placeholder="문의 내용을 작성해 주세요."
+                    value={ui.inquiryForm.message}
+                    ref={inquiryMessageRef}
+                    onChange={(event) => runAction("setInquiryField", "message", event.currentTarget.value)}
                   ></textarea>
                   <div className="inquiryCounter">
-                    <span id="inq-message-count">0</span>/2000
+                    <span id="inq-message-count">{inquiryMessageLength}</span>/2000
                   </div>
                 </div>
                 <div className="inquiryHoneypot" aria-hidden="true">
                   <label htmlFor="inq-website">웹사이트</label>
-                  <input id="inq-website" name="website" type="text" tabIndex="-1" autoComplete="off" />
+                  <input
+                    id="inq-website"
+                    name="website"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={ui.inquiryForm.website}
+                    onChange={(event) => runAction("setInquiryField", "website", event.currentTarget.value)}
+                  />
                 </div>
-                <div id="inquiry-status" className="inquiryStatus" aria-live="polite"></div>
+                <div id="inquiry-status" className="inquiryStatus" aria-live="polite">
+                  {ui.inquiryStatus}
+                </div>
               </div>
             </div>
 
             <div className="twModal__footer">
-              <Button id="inquiry-send" variant="primary" type="submit">
-                메일 보내기
+              <Button id="inquiry-send" variant="primary" type="submit" disabled={ui.inquirySubmitting}>
+                {ui.inquirySubmitting ? "전송 중..." : "메일 보내기"}
               </Button>
             </div>
           </div>
         </form>
       </dialog>
 
-      <dialog id="winner-dialog" className="dialog dialog--winner">
-        <form method="dialog" className="twModal" id="winner-form">
+      <dialog
+        id="winner-dialog"
+        className="dialog dialog--winner"
+        ref={winnerDialogRef}
+        onCancel={(event) => {
+          event.preventDefault();
+          runAction("closeWinner");
+        }}
+      >
+        <form className="twModal" id="winner-form" onSubmit={(event) => event.preventDefault()}>
           <div className="twModal__card">
             <div className="twModal__header">
               <div className="twModal__headText">
                 <div className="twModal__title">마지막 결과</div>
                 <div className="twModal__desc">마지막으로 도착한 공을 확인하세요.</div>
               </div>
-              <button className="twModal__close" value="close" type="submit" aria-label="닫기">
+              <button className="twModal__close" type="button" aria-label="닫기" onClick={() => runAction("closeWinner")}>
                 ×
               </button>
             </div>
@@ -379,17 +600,19 @@ export function AppShell() {
             <div className="twModal__body">
               <div className="twWinner">
                 <div className="twWinner__thumb">
-                  <img id="winner-img" src="data:," alt="" />
+                  <img id="winner-img" src={winner?.img || "data:,"} alt={winner?.name || ""} />
                 </div>
                 <div className="twWinner__copy">
                   <div className="twWinner__k">마지막 도착</div>
-                  <div className="twWinner__v" id="winner-name"></div>
+                  <div className="twWinner__v" id="winner-name">
+                    {winner?.name || "-"}
+                  </div>
                 </div>
               </div>
             </div>
 
             <div className="twModal__footer">
-              <Button variant="primary" type="submit">
+              <Button variant="primary" type="button" onClick={() => runAction("closeWinner")}>
                 확인
               </Button>
             </div>

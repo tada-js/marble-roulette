@@ -1,28 +1,23 @@
 import { BALL_LIBRARY } from "../game/assets.js";
-import { loadBallsCatalog, loadBallCounts, saveBallsCatalog, saveBallCounts } from "./storage.js";
-import { mountSettingsDialog } from "./settings.js";
+import {
+  loadBallsCatalog,
+  loadBallCounts,
+  restoreDefaultBalls,
+  saveBallsCatalog,
+  saveBallCounts,
+} from "./storage.js";
 
 /**
  * Create catalog controller for balls/settings/images.
+ * This module is intentionally UI-framework agnostic (no direct DOM access).
  *
  * @param {{
  *   state: { mode?: string; ballsCatalog?: unknown[]; counts?: Record<string, number> };
- *   addBallBtn?: HTMLButtonElement | null;
- *   settingsDialog?: HTMLDialogElement | null;
- *   settingsList?: HTMLElement | null;
- *   restoreDefaultsBtn?: HTMLButtonElement | null;
  *   onCatalogChange?: () => void;
  }} opts
  */
 export function createCatalogController(opts) {
-  const {
-    state,
-    addBallBtn,
-    settingsDialog,
-    settingsList,
-    restoreDefaultsBtn,
-    onCatalogChange = () => {},
-  } = opts;
+  const { state, onCatalogChange = () => {} } = opts;
 
   const imagesById = new Map();
   let catalog = normalizeInitialCatalog(loadBallsCatalog());
@@ -83,27 +78,82 @@ export function createCatalogController(opts) {
     onCatalogChange();
   }
 
-  const settings = mountSettingsDialog(
-    settingsDialog,
-    settingsList,
-    restoreDefaultsBtn,
-    () => catalog,
-    setCatalog
-  );
+  function sanitizeName(name, fallback) {
+    const value = String(name || "")
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+    return value || fallback;
+  }
 
-  addBallBtn?.addEventListener("click", () => {
-    if (state.mode === "playing") return;
-    if (catalog.length >= BALL_LIBRARY.length) return;
+  function isDataImageUrl(value) {
+    return typeof value === "string" && value.startsWith("data:image/");
+  }
 
+  function addNextBall() {
+    if (catalog.length >= BALL_LIBRARY.length) return false;
     const used = new Set(catalog.map((b) => b.id));
     const nextBall = BALL_LIBRARY.find((b) => !used.has(b.id));
-    if (!nextBall) return;
-
+    if (!nextBall) return false;
     const next = [...catalog, structuredClone(nextBall)];
     saveBallsCatalog(next);
     setCatalog(next);
-    settings.render?.();
-  });
+    return true;
+  }
+
+  /**
+   * @param {string} ballId
+   */
+  function removeBall(ballId) {
+    if (catalog.length <= 1) return false;
+    const next = catalog.filter((b) => b.id !== ballId);
+    if (next.length === catalog.length) return false;
+    saveBallsCatalog(next);
+    setCatalog(next);
+    return true;
+  }
+
+  /**
+   * @param {string} ballId
+   * @param {string} name
+   */
+  function updateBallName(ballId, name) {
+    const idx = catalog.findIndex((b) => b.id === ballId);
+    if (idx < 0) return false;
+    const target = catalog[idx];
+    const nextName = sanitizeName(name, target.name);
+    if (nextName === target.name) return false;
+    const next = catalog.slice();
+    next[idx] = { ...target, name: nextName };
+    saveBallsCatalog(next);
+    setCatalog(next);
+    return true;
+  }
+
+  /**
+   * @param {string} ballId
+   * @param {string} imageDataUrl
+   */
+  function updateBallImage(ballId, imageDataUrl) {
+    if (!isDataImageUrl(imageDataUrl)) return false;
+    const idx = catalog.findIndex((b) => b.id === ballId);
+    if (idx < 0) return false;
+    const target = catalog[idx];
+    if (target.imageDataUrl === imageDataUrl) return false;
+    const next = catalog.slice();
+    next[idx] = { ...target, imageDataUrl };
+    saveBallsCatalog(next);
+    setCatalog(next);
+    return true;
+  }
+
+  function restoreDefaults() {
+    const next = restoreDefaultBalls();
+    saveBallsCatalog(next);
+    setCatalog(next);
+    return true;
+  }
 
   /**
    * @param {string | undefined} ballId
@@ -120,8 +170,14 @@ export function createCatalogController(opts) {
   return {
     getCatalog: () => catalog,
     getImagesById: () => imagesById,
-    openSettings: () => settings.open(),
     saveCounts: saveBallCounts,
+    addNextBall,
+    removeBall,
+    updateBallName,
+    updateBallImage,
+    restoreDefaults,
+    getCatalogMax: () => BALL_LIBRARY.length,
+    isAtMax: () => catalog.length >= BALL_LIBRARY.length,
     getWinnerPayload,
     notifyCatalogMutated: onCatalogChange,
   };
