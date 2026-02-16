@@ -27,6 +27,15 @@
   - 파일: `src/ui-react/components/modal.tsx`
   - 헤더/본문/푸터/닫기 버튼을 공통 구조로 제공
 
+## Storybook
+
+- 설정 경로: `.storybook/`
+- 실행: `npm run storybook`
+- 확인 대상 스토리:
+  - `Design System/Button`
+  - `Design System/ModalCard`
+  - `Design System/Tokens`
+
 ## 스타일 규칙
 
 - 모든 클릭 가능한 컨트롤은 hover/focus/active 상태를 가져야 함

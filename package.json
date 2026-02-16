@@ -7,6 +7,8 @@
     "dev": "vite",
     "build:vite": "vite build",
     "preview:vite": "vite preview",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
     "test": "tsx --test",
     "lint": "node scripts/lint.mjs",
     "typecheck": "tsc --noEmit",
@@ -16,9 +18,11 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@storybook/react-vite": "^10.2.8",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",
+    "storybook": "^10.2.8",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vite": "^7.3.1"

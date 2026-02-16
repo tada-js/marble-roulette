@@ -45,6 +45,18 @@ npm run typecheck
 npm run build:vite
 ```
 
+## Storybook
+
+```bash
+npm run storybook
+```
+
+- 기본 주소: `http://localhost:6006`
+- 디자인 시스템 스토리:
+  - `Design System/Button`
+  - `Design System/ModalCard`
+  - `Design System/Tokens`
+
 ## Design System
 
 - 가이드: `docs/design-system.md`
