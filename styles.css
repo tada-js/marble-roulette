@@ -1,3 +1,5 @@
+@import "./node_modules/toastify-js/src/toastify.css";
+
 :root {
   --bg0: #0b1220;
   --bg1: #1b2a4a;
@@ -84,12 +86,6 @@ html, body {
   gap: 10px;
   flex-wrap: wrap;
   justify-self: end;
-}
-.topbar__divider {
-  width: 1px;
-  height: 26px;
-  background: rgba(255,255,255,0.16);
-  margin: 0 4px 0 10px;
 }
 .topbar__pause {
   min-width: 86px;
@@ -563,7 +559,8 @@ canvas#game {
   font-size: 11px;
   color: var(--muted);
 }
-.field input[type="text"] {
+.field input[type="text"],
+.field input[type="email"] {
   border-radius: 12px;
   border: 1px solid var(--stroke);
   background: rgba(0,0,0,0.18);
@@ -824,6 +821,19 @@ dialog.dialog--winner::backdrop {
 }
 
 @media (max-width: 980px) {
+  .topbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .topbar__center {
+    justify-self: stretch;
+    justify-content: center;
+  }
+  .topbar__right {
+    justify-self: stretch;
+    justify-content: flex-end;
+  }
   .stage {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -864,7 +874,6 @@ dialog.dialog--winner::backdrop {
     justify-content: flex-end;
     gap: 8px;
   }
-  .topbar__divider { display: none; }
   .btn {
     padding: 9px 10px;
     font-size: 13px;
@@ -1072,12 +1081,14 @@ dialog.dialog--settings::backdrop {
   font-size: 11px;
   color: rgba(255,255,255,0.70);
 }
-.twModal .field input[type="text"] {
+.twModal .field input[type="text"],
+.twModal .field input[type="email"] {
   border: 1px solid rgba(255,255,255,0.16);
   background: rgba(0,0,0,0.20);
   color: rgba(255,255,255,0.92);
 }
-.twModal .field input[type="text"]:focus {
+.twModal .field input[type="text"]:focus,
+.twModal .field input[type="email"]:focus {
   outline: none;
   border-color: rgba(0,255,255,0.35);
   box-shadow: 0 0 0 3px rgba(0,255,255,0.10);
@@ -1086,6 +1097,7 @@ dialog.dialog--settings::backdrop {
   border: 1px solid rgba(255,255,255,0.16);
   background: rgba(0,0,0,0.20);
   color: rgba(255,255,255,0.92);
+  padding: 10px 10px;
   width: 100%;
   resize: vertical;
   min-height: 120px;
@@ -1104,6 +1116,32 @@ dialog.dialog--settings::backdrop {
   min-height: 18px;
   font-size: 12px;
   color: rgba(255,255,255,0.72);
+}
+.inquiryCounter {
+  text-align: right;
+  font-size: 11px;
+  color: rgba(255,255,255,0.62);
+}
+.inquiryHoneypot {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.toastify.dg-toast {
+  border-radius: 12px;
+  border: 1px solid rgba(0,255,255,0.45);
+  background: linear-gradient(180deg, rgba(10,16,34,0.95), rgba(5,10,22,0.95));
+  color: rgba(236,248,255,0.96);
+  font-weight: 700;
+  box-shadow: 0 14px 36px rgba(0,0,0,0.42);
+  font-family: var(--sans);
+}
+.toastify.dg-toast.dg-toast--error {
+  border-color: rgba(255,92,92,0.62);
 }
 
 @media (max-width: 980px) {

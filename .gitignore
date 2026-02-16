@@ -1,5 +1,6 @@
 node_modules/
 output/
+.next/
 .DS_Store
 .env
 .env.local

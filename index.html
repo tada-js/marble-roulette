@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="contact-email" content="your-email@example.com" />
     <title>데구르르 (Degururu)</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -85,7 +84,7 @@
           <div class="twModal__header">
             <div class="twModal__headText">
               <div class="twModal__title">문의하기</div>
-              <div class="twModal__desc">입력한 내용이 메일 앱으로 전송됩니다.</div>
+              <div class="twModal__desc">문의 내용을 안전하게 전송합니다.</div>
             </div>
             <button class="twModal__close" value="close" type="submit" formnovalidate aria-label="닫기">×</button>
           </div>
@@ -94,11 +93,11 @@
             <div class="inquiryForm">
               <div class="field">
                 <label for="inq-name">이름</label>
-                <input id="inq-name" name="name" type="text" maxlength="40" placeholder="홍길동" />
+                <input id="inq-name" name="name" type="text" maxlength="40" required autocomplete="name" placeholder="홍길동" />
               </div>
               <div class="field">
                 <label for="inq-email">이메일</label>
-                <input id="inq-email" name="email" type="text" maxlength="120" placeholder="you@example.com" />
+                <input id="inq-email" name="email" type="email" maxlength="120" required autocomplete="email" placeholder="you@example.com" />
               </div>
               <div class="field">
                 <label for="inq-subject">제목</label>
@@ -107,13 +106,18 @@
               <div class="field">
                 <label for="inq-message">내용</label>
                 <textarea id="inq-message" name="message" rows="6" maxlength="2000" required placeholder="문의 내용을 작성해 주세요."></textarea>
+                <div class="inquiryCounter"><span id="inq-message-count">0</span>/2000</div>
+              </div>
+              <div class="inquiryHoneypot" aria-hidden="true">
+                <label for="inq-website">웹사이트</label>
+                <input id="inq-website" name="website" type="text" tabindex="-1" autocomplete="off" />
               </div>
               <div id="inquiry-status" class="inquiryStatus" aria-live="polite"></div>
             </div>
           </div>
 
           <div class="twModal__footer">
-            <button id="inquiry-send" class="btn btn--primary" type="submit">메일 앱으로 보내기</button>
+            <button id="inquiry-send" class="btn btn--primary" type="submit">메일 보내기</button>
           </div>
         </div>
       </form>
@@ -127,7 +131,7 @@
               <div class="twModal__title">마지막 결과</div>
               <div class="twModal__desc">마지막으로 도착한 공을 확인하세요.</div>
             </div>
-            <button class="twModal__close" value="close" type="submit" formnovalidate aria-label="닫기">×</button>
+            <button class="twModal__close" value="close" type="submit" aria-label="닫기">×</button>
           </div>
 
           <div class="twModal__body">
