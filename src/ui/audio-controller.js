@@ -1,157 +1,196 @@
+const TRACKS = Object.freeze({
+  bgm_1: ["/assets/bgm_1.mp3", "/public/assets/bgm_1.mp3"],
+  bgm_2: ["/assets/bgm_2.mp3", "/public/assets/bgm_2.mp3"],
+});
+const DEFAULT_TRACK = "bgm_1";
+const BGM_VOLUME = 0.3;
+
 /**
- * Create BGM controller (8-bit style procedural synth).
+ * Create BGM controller (MP3 tracks).
  *
  * @param {{
  *   button?: HTMLButtonElement | null;
+ *   settingsButton?: HTMLButtonElement | null;
+ *   menu?: HTMLElement | null;
  *   storageKey?: string;
+ *   trackStorageKey?: string;
  * }} opts
  */
 export function createAudioController(opts = {}) {
-  const { button = null, storageKey = "bgmOn" } = opts;
+  const {
+    button = null,
+    settingsButton = null,
+    menu = null,
+    storageKey = "bgmOn",
+    trackStorageKey = "bgmTrack",
+  } = opts;
+
+  const labelEl = button?.querySelector("[data-bgm-label]") || null;
+  const menuItems = menu ? Array.from(menu.querySelectorAll("[data-bgm-track]")) : [];
+  const trackMap = new WeakMap();
 
   const bgm = {
     on: false,
-    ctx: null,
-    gain: null,
-    timer: null,
-    loopSec: 0,
-    nextT: 0,
+    track: DEFAULT_TRACK,
+    audio: null,
     _armed: false,
+    _resumeHandler: null,
   };
 
   /**
-   * @param {number} n
+   * @param {unknown} value
    */
-  function midiToHz(n) {
-    return 440 * Math.pow(2, (n - 69) / 12);
+  function isValidTrack(value) {
+    return typeof value === "string" && Object.prototype.hasOwnProperty.call(TRACKS, value);
+  }
+
+  /**
+   * @param {string} trackId
+   */
+  function createAudio(trackId) {
+    const sources = TRACKS[trackId];
+    let sourceIndex = 0;
+    const audio = new Audio(sources[sourceIndex]);
+    audio.preload = "auto";
+    audio.loop = true;
+    audio.volume = BGM_VOLUME;
+    audio.addEventListener("error", () => {
+      if (sourceIndex >= sources.length - 1) return;
+      sourceIndex += 1;
+      audio.src = sources[sourceIndex];
+      audio.load();
+      if (bgm.on) {
+        void audio.play().catch(() => {
+          armAutostart();
+        });
+      }
+      const meta = trackMap.get(audio);
+      if (meta) meta.sourceIndex = sourceIndex;
+    });
+
+    trackMap.set(audio, { trackId, sourceIndex });
+    return audio;
+  }
+
+  function clearAutostartArming() {
+    if (!bgm._armed || !bgm._resumeHandler) return;
+    window.removeEventListener("pointerdown", bgm._resumeHandler);
+    window.removeEventListener("keydown", bgm._resumeHandler);
+    bgm._armed = false;
+    bgm._resumeHandler = null;
+  }
+
+  function ensureAudioForTrack() {
+    if (!bgm.audio) {
+      bgm.audio = createAudio(bgm.track);
+      return;
+    }
+    const currentTrack = trackMap.get(bgm.audio);
+    if (currentTrack?.trackId === bgm.track) return;
+
+    try {
+      bgm.audio.pause();
+      bgm.audio.src = "";
+      bgm.audio.load();
+    } catch {
+      // ignore
+    }
+    bgm.audio = createAudio(bgm.track);
   }
 
   function stop() {
-    if (bgm.timer) {
-      clearInterval(bgm.timer);
-      bgm.timer = null;
+    clearAutostartArming();
+    if (!bgm.audio) return;
+    try {
+      bgm.audio.pause();
+      bgm.audio.currentTime = 0;
+    } catch {
+      // ignore
     }
-    bgm.nextT = 0;
-    if (bgm.gain) {
-      try {
-        bgm.gain.gain.setValueAtTime(0.0, bgm.ctx.currentTime);
-      } catch {
-        // ignore
-      }
-    }
-    if (bgm.ctx) {
-      bgm.ctx.close().catch(() => {});
-    }
-    bgm.ctx = null;
-    bgm.gain = null;
-    bgm.loopSec = 0;
   }
 
-  function start() {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-
-    stop();
-    const ctx = new AC();
-    const gain = ctx.createGain();
-    gain.gain.value = 0.0;
-    gain.connect(ctx.destination);
-    bgm.ctx = ctx;
-    bgm.gain = gain;
-
-    const t0 = ctx.currentTime + 0.02;
-    gain.gain.setValueAtTime(0.0, t0);
-    gain.gain.linearRampToValueAtTime(0.12, t0 + 0.25);
-
-    const bpm = 152;
-    const step = 60 / bpm / 2;
-    const bars = 4;
-    const stepsPerBar = 8;
-    const totalSteps = bars * stepsPerBar;
-    bgm.loopSec = totalSteps * step;
-    bgm.nextT = t0;
-
-    const melody = [
-      76, 79, 83, 79, 76, 74, 71, 74,
-      76, 79, 83, 86, 83, 79, 76, 74,
-      71, 74, 76, 79, 83, 79, 76, 74,
-      71, 69, 71, 74, 76, 74, 71, 69,
-    ];
-    const bass = [
-      52, 52, 52, 52, 50, 50, 50, 50,
-      48, 48, 48, 48, 50, 50, 50, 50,
-      52, 52, 52, 52, 55, 55, 55, 55,
-      50, 50, 50, 50, 48, 48, 48, 48,
-    ];
-
-    /**
-     * @param {"square" | "triangle"} type
-     * @param {number} hz
-     * @param {number} startT
-     * @param {number} dur
-     * @param {number} vol
-     */
-    function playTone(type, hz, startT, dur, vol) {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(hz, startT);
-      g.gain.setValueAtTime(0.0001, startT);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), startT + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, startT + dur);
-      o.connect(g);
-      g.connect(gain);
-      o.start(startT);
-      o.stop(startT + dur + 0.02);
+  async function play() {
+    ensureAudioForTrack();
+    if (!bgm.audio) return;
+    bgm.audio.loop = true;
+    bgm.audio.volume = BGM_VOLUME;
+    if (bgm.audio.readyState === 0) bgm.audio.load();
+    try {
+      await bgm.audio.play();
+    } catch {
+      armAutostart();
     }
-
-    /**
-     * @param {number} fromT
-     * @param {number} horizonSec
-     */
-    function schedule(fromT, horizonSec) {
-      const endT = fromT + horizonSec;
-      let t = bgm.nextT;
-      while (t < endT) {
-        const k = Math.floor((t - t0) / step);
-        const i = ((k % totalSteps) + totalSteps) % totalSteps;
-        const m = melody[i];
-        const b = bass[i];
-        playTone("square", midiToHz(m), t, step * 0.92, 0.080);
-        playTone("triangle", midiToHz(b), t, step * 0.98, 0.068);
-        if (i % 2 === 0) playTone("square", midiToHz(b - 12), t, step * 0.30, 0.024);
-        t += step;
-      }
-      bgm.nextT = t;
-    }
-
-    schedule(ctx.currentTime, 0.8);
-    bgm.timer = setInterval(() => {
-      if (!bgm.ctx) return;
-      const now = bgm.ctx.currentTime;
-      if (bgm.nextT && bgm.nextT < now) bgm.nextT = now;
-      schedule(now, 0.9);
-    }, 320);
   }
 
   function armAutostart() {
-    if (bgm.ctx || bgm._armed) return;
+    if (bgm._armed) return;
     bgm._armed = true;
 
     const tryResume = () => {
-      if (!bgm.on) return cleanup();
-      if (bgm.ctx) return cleanup();
-      start();
-      cleanup();
-    };
-    const cleanup = () => {
-      window.removeEventListener("pointerdown", tryResume);
-      window.removeEventListener("keydown", tryResume);
-      bgm._armed = false;
+      if (!bgm.on) {
+        clearAutostartArming();
+        return;
+      }
+      void play();
+      clearAutostartArming();
     };
 
-    window.addEventListener("pointerdown", tryResume, { once: true, passive: true });
-    window.addEventListener("keydown", tryResume, { once: true });
+    bgm._resumeHandler = tryResume;
+    window.addEventListener("pointerdown", tryResume, { passive: true });
+    window.addEventListener("keydown", tryResume);
+  }
+
+  function syncToggleLabel() {
+    if (!button) return;
+    button.setAttribute("aria-pressed", bgm.on ? "true" : "false");
+    const label = bgm.on ? "BGM 켬" : "BGM 끔";
+    if (labelEl) labelEl.textContent = label;
+    else button.textContent = label;
+  }
+
+  function syncMenuSelection() {
+    for (const item of menuItems) {
+      const trackId = item.dataset.bgmTrack;
+      const selected = trackId === bgm.track;
+      item.setAttribute("aria-checked", selected ? "true" : "false");
+    }
+  }
+
+  /**
+   * @param {boolean} open
+   */
+  function setMenuOpen(open) {
+    if (!menu || !settingsButton) return;
+    const next = !!open;
+    menu.hidden = !next;
+    settingsButton.setAttribute("aria-expanded", next ? "true" : "false");
+  }
+
+  function toggleMenu() {
+    if (!menu) return;
+    setMenuOpen(menu.hidden);
+  }
+
+  /**
+   * @param {string} trackId
+   * @param {{autoplay?: boolean}} [opts]
+   */
+  function setTrack(trackId, opts = {}) {
+    const { autoplay = true } = opts;
+    if (!isValidTrack(trackId)) return;
+    bgm.track = trackId;
+    try {
+      localStorage.setItem(trackStorageKey, bgm.track);
+    } catch {
+      // ignore
+    }
+    syncMenuSelection();
+
+    ensureAudioForTrack();
+
+    if (!bgm.on) return;
+    if (autoplay) void play();
+    else armAutostart();
   }
 
   /**
@@ -166,14 +205,10 @@ export function createAudioController(opts = {}) {
     } catch {
       // ignore
     }
-
-    if (button) {
-      button.setAttribute("aria-pressed", bgm.on ? "true" : "false");
-      button.textContent = bgm.on ? "BGM 켬" : "BGM 끔";
-    }
+    syncToggleLabel();
 
     if (bgm.on) {
-      if (autoplay) start();
+      if (autoplay) void play();
       else armAutostart();
     } else {
       stop();
@@ -188,18 +223,65 @@ export function createAudioController(opts = {}) {
   }
 
   function restoreFromStorage() {
+    let nextOn = true;
+
+    try {
+      const savedTrack = localStorage.getItem(trackStorageKey);
+      if (isValidTrack(savedTrack)) bgm.track = savedTrack;
+    } catch {
+      // ignore
+    }
+    syncMenuSelection();
+
     try {
       const v = localStorage.getItem(storageKey);
-      setOn(v === "1", { autoplay: false });
+      if (v === "0") nextOn = false;
+      else if (v === "1") nextOn = true;
     } catch {
-      setOn(false, { autoplay: false });
+      nextOn = true;
     }
+
+    setOn(nextOn, { autoplay: false });
   }
+
+  settingsButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleMenu();
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!menu || menu.hidden) return;
+    const target = event.target;
+    if (!(target instanceof Node)) return;
+    if (menu.contains(target)) return;
+    if (settingsButton?.contains(target)) return;
+    setMenuOpen(false);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    setMenuOpen(false);
+  });
+
+  for (const item of menuItems) {
+    item.addEventListener("click", () => {
+      const trackId = item.dataset.bgmTrack;
+      if (!isValidTrack(trackId)) return;
+      setTrack(trackId, { autoplay: true });
+      setMenuOpen(false);
+    });
+  }
+
+  syncToggleLabel();
+  syncMenuSelection();
+  setMenuOpen(false);
 
   return {
     isOn: () => bgm.on,
     setOn,
     toggle,
+    setTrack,
+    getTrack: () => bgm.track,
     restoreFromStorage,
   };
 }

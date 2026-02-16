@@ -32,6 +32,8 @@ export function bootstrapGameApp() {
     settingsBtn,
     inquiryBtn,
     bgmBtn,
+    bgmSettingsBtn,
+    bgmMenu,
     winnerBtn,
     ballsEl,
     minimap,
@@ -113,7 +115,11 @@ export function bootstrapGameApp() {
     return catalogController.getWinnerPayload(state?.winner?.ballId);
   }
 
-  const audioController = createAudioController({ button: bgmBtn });
+  const audioController = createAudioController({
+    button: bgmBtn,
+    settingsButton: bgmSettingsBtn,
+    menu: bgmMenu,
+  });
   const resultController = createResultController({
     dialog: winnerDialog,
     imageEl: winnerImgEl,
