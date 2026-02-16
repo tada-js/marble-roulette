@@ -18,6 +18,7 @@ import { BALL_LIBRARY } from "./game/assets.js";
 
 const canvas = document.getElementById("game");
 const startBtn = document.getElementById("start-btn");
+const pauseBtn = document.getElementById("pause-btn");
 const settingsBtn = document.getElementById("settings-btn");
 const inquiryBtn = document.getElementById("inquiry-btn");
 const bgmBtn = document.getElementById("bgm-btn");
@@ -125,6 +126,7 @@ let ballsCatalog = loadBallsCatalog();
 }
 
 const state = makeGameState({ seed: 1337, board, ballsCatalog });
+state.paused = false;
 state.counts = loadBallCounts(ballsCatalog);
 const renderer = makeRenderer(canvas, { board });
 const minimapCtx = minimap?.getContext?.("2d");
@@ -287,6 +289,11 @@ function updateControls() {
   // After the game ends, show it as "게임 시작" for the next run.
   const inRun = state.mode === "playing" && !state.winner;
   startBtn.textContent = inRun ? "게임 재시작" : "게임 시작";
+  if (pauseBtn) {
+    pauseBtn.disabled = !inRun;
+    pauseBtn.textContent = state.paused ? "이어하기" : "일시정지";
+    pauseBtn.setAttribute("aria-pressed", state.paused ? "true" : "false");
+  }
   if (viewLockEl) {
     const v = renderer.getViewState?.();
     viewLockEl.disabled = !(state.mode === "playing" && state.released && v);
@@ -550,6 +557,7 @@ function tryStart() {
   state.seed = ((Date.now() & 0xffffffff) ^ (Math.random() * 0xffffffff)) >>> 0;
   state.rng = makeRng(state.seed);
   startGame(state);
+  state.paused = false;
   state._shownResultId = null;
   state._shownWinnerT = null;
   renderBallCards(); // disable +/- while playing
@@ -570,12 +578,19 @@ startBtn.addEventListener("click", () => {
     resetGame(state);
     state._shownResultId = null;
     state._shownWinnerT = null;
+    state.paused = false;
     renderer.clearCameraOverride?.();
     tailFocusOn = true;
     if (viewLockEl) viewLockEl.checked = true;
     setWinnerCache(null);
   }
   tryStart();
+});
+
+pauseBtn?.addEventListener("click", () => {
+  if (state.mode !== "playing" || state.winner) return;
+  state.paused = !state.paused;
+  updateControls();
 });
 
 settingsBtn.addEventListener("click", () => {
@@ -589,6 +604,17 @@ inquiryBtn?.addEventListener("click", () => {
 });
 
 inquiryForm?.addEventListener("submit", (e) => {
+  const submitter = e.submitter;
+  const isCloseSubmit =
+    submitter &&
+    submitter.tagName === "BUTTON" &&
+    (submitter.value === "close" || submitter.classList?.contains("twModal__close"));
+  if (isCloseSubmit) {
+    if (inquiryStatusEl) inquiryStatusEl.textContent = "";
+    inquiryDialog?.close();
+    return;
+  }
+
   e.preventDefault();
   const targetEmail = String(document.querySelector('meta[name="contact-email"]')?.content || "").trim();
   if (!targetEmail || targetEmail === "your-email@example.com") {
@@ -717,7 +743,7 @@ let last = performance.now();
 function raf(now) {
   const dtMs = Math.min(40, now - last);
   last = now;
-  if (state.mode === "playing") tickFixed(dtMs);
+  if (state.mode === "playing" && !state.paused) tickFixed(dtMs);
   else renderer.draw(state, ballsCatalog, imagesById);
   requestAnimationFrame(raf);
 }
