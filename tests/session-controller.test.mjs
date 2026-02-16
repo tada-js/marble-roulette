@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSessionController } from "../src/game/session-controller.js";
+import { createSessionController } from "../src/game/session-controller.ts";
 
 function makeCallCounter() {
   const calls = [];

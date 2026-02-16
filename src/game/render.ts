@@ -1,3 +1,4 @@
+// @ts-nocheck
 export function makeRenderer(canvas, { board }) {
   const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) throw new Error("2D context not available");

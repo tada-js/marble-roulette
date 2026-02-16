@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Lightweight, deterministic-ish pinball/ladder simulation (no external deps).
 
 export function makeRng(seed) {

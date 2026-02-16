@@ -9,12 +9,12 @@ import {
   getBallCount,
   getTotalSelectedCount,
   setBallCount,
-} from "../game/engine.js";
-import { makeRenderer } from "../game/render.js";
-import { createGameBoard } from "../game/board-config.js";
-import { createLoopController } from "../game/loop-controller.js";
-import { createSessionController } from "../game/session-controller.js";
-import { mountDebugHooks } from "../game/debug-hooks.js";
+} from "../game/engine.ts";
+import { makeRenderer } from "../game/render.ts";
+import { createGameBoard } from "../game/board-config.ts";
+import { createLoopController } from "../game/loop-controller.ts";
+import { createSessionController } from "../game/session-controller.ts";
+import { mountDebugHooks } from "../game/debug-hooks.ts";
 import { createCatalogController } from "../ui/catalog-controller.js";
 import { mountViewControls } from "../ui/view-controls.js";
 import { createAudioController } from "../ui/audio-controller.js";

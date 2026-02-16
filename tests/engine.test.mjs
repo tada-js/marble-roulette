@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeBoard, makeGameState, startGame, setDropX, dropAll, setBallCount, step } from "../src/game/engine.js";
+import { makeBoard, makeGameState, startGame, setDropX, dropAll, setBallCount, step } from "../src/game/engine.ts";
 
 test("dropAll releases all marbles and winner is the last finisher", () => {
   const board = makeBoard({ slotCount: 8, heightMultiplier: 1, corridorEnabled: false });

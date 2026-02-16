@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Create a frame/update loop controller.
  *

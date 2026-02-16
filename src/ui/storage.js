@@ -1,4 +1,4 @@
-import { DEFAULT_BALLS } from "../game/assets.js";
+import { DEFAULT_BALLS } from "../game/assets.ts";
 
 const KEY = "marble-roulette:balls:v1";
 const COUNTS_KEY = "marble-roulette:ball-counts:v1";

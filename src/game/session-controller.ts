@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Create game session controller.
  *

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Mount debug/testing hooks on window for automation.
  *

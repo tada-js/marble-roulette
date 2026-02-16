@@ -5,7 +5,7 @@
 ## Features
 
 - 기본 공: 강아지 / 토끼 / 햄스터
-- UI 레이어: React + TypeScript 기반(엔진/렌더는 기존 JS 유지)
+- UI/엔진/렌더 레이어: TypeScript 기반
 - 공별 이름/이미지 커스터마이즈(업로드, 로컬 저장)
 - `게임 시작`으로 선택된 공 전체 동시 투하
 - `일시정지/이어하기`, 시점 고정/자유 시점 전환
@@ -22,7 +22,7 @@ npm run dev
 ```
 
 브라우저에서 `http://localhost:5173` 접속.
-`npm run dev`는 Vite + React/TypeScript UI 셸(엔진/렌더는 기존 JS 유지)로 실행됩니다.
+`npm run dev`는 Vite + React/TypeScript로 실행됩니다.
 
 문의 메일 전송(서버 API) 설정:
 

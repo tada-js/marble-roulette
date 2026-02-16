@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_BALLS } from "../src/game/assets.js";
+import { DEFAULT_BALLS } from "../src/game/assets.ts";
 import {
   loadBallsCatalog,
   saveBallsCatalog,

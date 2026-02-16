@@ -1,4 +1,5 @@
-import { makeBoard } from "./engine.js";
+// @ts-nocheck
+import { makeBoard } from "./engine.ts";
 
 /**
  * Hand-tuned extra rotors (world coords or xFrac/yFrac in [0..1]).

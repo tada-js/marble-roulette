@@ -1,4 +1,4 @@
-import { BALL_LIBRARY } from "../game/assets.js";
+import { BALL_LIBRARY } from "../game/assets.ts";
 import {
   loadBallsCatalog,
   loadBallCounts,
