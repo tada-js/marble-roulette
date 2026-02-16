@@ -15,6 +15,7 @@ import {
   type UiActions,
 } from "../app/ui-store";
 import { Button, IconButton } from "./components/button";
+import { ModalCard } from "./components/modal";
 
 const CATALOG_MAX = 15;
 
@@ -184,15 +185,16 @@ export function AppShell() {
 
           <div className="topbar__right">
             <div className="bgmControl" ref={bgmControlRef}>
-              <button
+              <Button
                 id="bgm-btn"
+                variant="ghost"
+                size="md"
                 className="bgmControl__toggle"
-                type="button"
-                aria-pressed={ui.bgmOn ? "true" : "false"}
+                ariaPressed={ui.bgmOn}
                 onClick={() => runAction("toggleBgm")}
               >
                 <span data-bgm-label>{ui.bgmOn ? "BGM 켬" : "BGM 끔"}</span>
-              </button>
+              </Button>
 
               <IconButton
                 id="bgm-settings-btn"
@@ -363,105 +365,104 @@ export function AppShell() {
         }}
       >
         <form className="twModal" id="settings-form" onSubmit={(event) => event.preventDefault()}>
-          <div className="twModal__card">
-            <div className="twModal__header">
-              <div className="twModal__headText">
-                <div className="twModal__title">공 설정</div>
-                <div className="twModal__desc">공을 추가/삭제하고, 이름과 이미지를 바꿀 수 있어요.</div>
-              </div>
-              <button className="twModal__close" type="button" aria-label="닫기" onClick={() => runAction("closeSettings")}>
-                ×
-              </button>
-            </div>
-
-            <div className="twModal__body">
-              <div className="twList" id="settings-list">
-                {ui.balls.map((ball) => {
-                  const fileInputId = `ball-file-${ball.id}`;
-                  return (
-                    <div className="twItem" key={ball.id}>
-                      <div className="twItem__thumb">
-                        <img alt={ball.name} src={ball.imageDataUrl} />
-                      </div>
-                      <div className="twItem__main">
-                        <div className="twItem__grid">
-                          <div className="field">
-                            <label htmlFor={`ball-name-${ball.id}`}>이름</label>
+          <ModalCard
+            title="공 설정"
+            description="공을 추가/삭제하고, 이름과 이미지를 바꿀 수 있어요."
+            onClose={() => runAction("closeSettings")}
+            footer={
+              <>
+                <Button
+                  id="add-ball"
+                  variant="ghost"
+                  type="button"
+                  disabled={!canAddCatalogBall}
+                  onClick={() => runAction("addCatalogBall")}
+                >
+                  공 추가
+                </Button>
+                <Button
+                  id="restore-defaults"
+                  variant="ghost"
+                  type="button"
+                  disabled={catalogLocked}
+                  onClick={() => runAction("restoreDefaultCatalog")}
+                >
+                  기본값 복원
+                </Button>
+                <Button variant="primary" type="button" onClick={() => runAction("closeSettings")}>
+                  닫기
+                </Button>
+              </>
+            }
+          >
+            <div className="twList" id="settings-list">
+              {ui.balls.map((ball) => {
+                const fileInputId = `ball-file-${ball.id}`;
+                return (
+                  <div className="twItem" key={ball.id}>
+                    <div className="twItem__thumb">
+                      <img alt={ball.name} src={ball.imageDataUrl} />
+                    </div>
+                    <div className="twItem__main">
+                      <div className="twItem__grid">
+                        <div className="field">
+                          <label htmlFor={`ball-name-${ball.id}`}>이름</label>
+                          <input
+                            id={`ball-name-${ball.id}`}
+                            type="text"
+                            value={ball.name}
+                            maxLength={40}
+                            disabled={catalogLocked}
+                            onChange={(event) => runAction("setCatalogBallName", ball.id, event.currentTarget.value)}
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor={fileInputId}>이미지</label>
+                          <div className="fileRow">
+                            <label className="btn btn--ghost btn--md fileRow__btn" htmlFor={fileInputId}>
+                              파일 선택
+                            </label>
+                            <div className="fileRow__name">{fileNames[ball.id] || "선택 안 함"}</div>
                             <input
-                              id={`ball-name-${ball.id}`}
-                              type="text"
-                              value={ball.name}
-                              maxLength={40}
+                              id={fileInputId}
+                              className="fileRow__input"
+                              type="file"
+                              accept="image/*"
                               disabled={catalogLocked}
-                              onChange={(event) => runAction("setCatalogBallName", ball.id, event.currentTarget.value)}
+                              onChange={async (event) => {
+                                const file = event.currentTarget.files?.[0];
+                                setFileNames((prev) => ({
+                                  ...prev,
+                                  [ball.id]: file?.name ? file.name.slice(0, 32) : "선택 안 함",
+                                }));
+                                if (!file) return;
+                                await runAction("setCatalogBallImage", ball.id, file);
+                                event.currentTarget.value = "";
+                              }}
                             />
                           </div>
-                          <div className="field">
-                            <label htmlFor={fileInputId}>이미지</label>
-                            <div className="fileRow">
-                              <label className="btn btn--ghost btn--md fileRow__btn" htmlFor={fileInputId}>
-                                파일 선택
-                              </label>
-                              <div className="fileRow__name">{fileNames[ball.id] || "선택 안 함"}</div>
-                              <input
-                                id={fileInputId}
-                                className="fileRow__input"
-                                type="file"
-                                accept="image/*"
-                                disabled={catalogLocked}
-                                onChange={async (event) => {
-                                  const file = event.currentTarget.files?.[0];
-                                  setFileNames((prev) => ({
-                                    ...prev,
-                                    [ball.id]: file?.name ? file.name.slice(0, 32) : "선택 안 함",
-                                  }));
-                                  if (!file) return;
-                                  await runAction("setCatalogBallImage", ball.id, file);
-                                  event.currentTarget.value = "";
-                                }}
-                              />
-                            </div>
-                          </div>
-                          <div className="field">
-                            <label>ID (고정)</label>
-                            <input type="text" value={ball.id} disabled />
-                          </div>
                         </div>
-                        <div className="twItem__actions">
-                          <Button
-                            variant="danger"
-                            className="twItem__remove"
-                            disabled={!canRemoveCatalogBall}
-                            onClick={() => runAction("removeCatalogBall", ball.id)}
-                          >
-                            삭제
-                          </Button>
+                        <div className="field">
+                          <label>ID (고정)</label>
+                          <input type="text" value={ball.id} disabled />
                         </div>
                       </div>
+                      <div className="twItem__actions">
+                        <Button
+                          variant="danger"
+                          className="twItem__remove"
+                          disabled={!canRemoveCatalogBall}
+                          onClick={() => runAction("removeCatalogBall", ball.id)}
+                        >
+                          삭제
+                        </Button>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
-
-            <div className="twModal__footer">
-              <Button id="add-ball" variant="ghost" type="button" disabled={!canAddCatalogBall} onClick={() => runAction("addCatalogBall")}>
-                공 추가
-              </Button>
-              <Button
-                id="restore-defaults"
-                variant="ghost"
-                type="button"
-                disabled={catalogLocked}
-                onClick={() => runAction("restoreDefaultCatalog")}
-              >
-                기본값 복원
-              </Button>
-              <Button variant="primary" type="button" onClick={() => runAction("closeSettings")}>
-                닫기
-              </Button>
-            </div>
-          </div>
+          </ModalCard>
         </form>
       </dialog>
 
@@ -475,104 +476,95 @@ export function AppShell() {
         }}
       >
         <form className="twModal" id="inquiry-form" onSubmit={handleInquirySubmit}>
-          <div className="twModal__card">
-            <div className="twModal__header">
-              <div className="twModal__headText">
-                <div className="twModal__title">문의하기</div>
-                <div className="twModal__desc">문의 내용을 안전하게 전송합니다.</div>
-              </div>
-              <button className="twModal__close" type="button" aria-label="닫기" onClick={() => runAction("closeInquiry")}>
-                ×
-              </button>
-            </div>
-
-            <div className="twModal__body">
-              <div className="inquiryForm">
-                <div className="field">
-                  <label htmlFor="inq-name">이름</label>
-                  <input
-                    id="inq-name"
-                    name="name"
-                    type="text"
-                    maxLength={40}
-                    required
-                    autoComplete="name"
-                    placeholder="홍길동"
-                    value={ui.inquiryForm.name}
-                    ref={inquiryNameRef}
-                    onChange={(event) => runAction("setInquiryField", "name", event.currentTarget.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="inq-email">이메일</label>
-                  <input
-                    id="inq-email"
-                    name="email"
-                    type="email"
-                    maxLength={120}
-                    required
-                    autoComplete="email"
-                    placeholder="you@example.com"
-                    value={ui.inquiryForm.email}
-                    ref={inquiryEmailRef}
-                    onChange={(event) => runAction("setInquiryField", "email", event.currentTarget.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="inq-subject">제목</label>
-                  <input
-                    id="inq-subject"
-                    name="subject"
-                    type="text"
-                    maxLength={80}
-                    required
-                    placeholder="문의 제목"
-                    value={ui.inquiryForm.subject}
-                    ref={inquirySubjectRef}
-                    onChange={(event) => runAction("setInquiryField", "subject", event.currentTarget.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="inq-message">내용</label>
-                  <textarea
-                    id="inq-message"
-                    name="message"
-                    rows={6}
-                    maxLength={2000}
-                    required
-                    placeholder="문의 내용을 작성해 주세요."
-                    value={ui.inquiryForm.message}
-                    ref={inquiryMessageRef}
-                    onChange={(event) => runAction("setInquiryField", "message", event.currentTarget.value)}
-                  ></textarea>
-                  <div className="inquiryCounter">
-                    <span id="inq-message-count">{inquiryMessageLength}</span>/2000
-                  </div>
-                </div>
-                <div className="inquiryHoneypot" aria-hidden="true">
-                  <label htmlFor="inq-website">웹사이트</label>
-                  <input
-                    id="inq-website"
-                    name="website"
-                    type="text"
-                    tabIndex={-1}
-                    autoComplete="off"
-                    value={ui.inquiryForm.website}
-                    onChange={(event) => runAction("setInquiryField", "website", event.currentTarget.value)}
-                  />
-                </div>
-                <div id="inquiry-status" className="inquiryStatus" aria-live="polite">
-                  {ui.inquiryStatus}
-                </div>
-              </div>
-            </div>
-
-            <div className="twModal__footer">
+          <ModalCard
+            title="문의하기"
+            description="문의 내용을 안전하게 전송합니다."
+            onClose={() => runAction("closeInquiry")}
+            footer={
               <Button id="inquiry-send" variant="primary" type="submit" disabled={ui.inquirySubmitting}>
                 {ui.inquirySubmitting ? "전송 중..." : "메일 보내기"}
               </Button>
+            }
+          >
+            <div className="inquiryForm">
+              <div className="field">
+                <label htmlFor="inq-name">이름</label>
+                <input
+                  id="inq-name"
+                  name="name"
+                  type="text"
+                  maxLength={40}
+                  required
+                  autoComplete="name"
+                  placeholder="홍길동"
+                  value={ui.inquiryForm.name}
+                  ref={inquiryNameRef}
+                  onChange={(event) => runAction("setInquiryField", "name", event.currentTarget.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="inq-email">이메일</label>
+                <input
+                  id="inq-email"
+                  name="email"
+                  type="email"
+                  maxLength={120}
+                  required
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={ui.inquiryForm.email}
+                  ref={inquiryEmailRef}
+                  onChange={(event) => runAction("setInquiryField", "email", event.currentTarget.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="inq-subject">제목</label>
+                <input
+                  id="inq-subject"
+                  name="subject"
+                  type="text"
+                  maxLength={80}
+                  required
+                  placeholder="문의 제목"
+                  value={ui.inquiryForm.subject}
+                  ref={inquirySubjectRef}
+                  onChange={(event) => runAction("setInquiryField", "subject", event.currentTarget.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="inq-message">내용</label>
+                <textarea
+                  id="inq-message"
+                  name="message"
+                  rows={6}
+                  maxLength={2000}
+                  required
+                  placeholder="문의 내용을 작성해 주세요."
+                  value={ui.inquiryForm.message}
+                  ref={inquiryMessageRef}
+                  onChange={(event) => runAction("setInquiryField", "message", event.currentTarget.value)}
+                ></textarea>
+                <div className="inquiryCounter">
+                  <span id="inq-message-count">{inquiryMessageLength}</span>/2000
+                </div>
+              </div>
+              <div className="inquiryHoneypot" aria-hidden="true">
+                <label htmlFor="inq-website">웹사이트</label>
+                <input
+                  id="inq-website"
+                  name="website"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={ui.inquiryForm.website}
+                  onChange={(event) => runAction("setInquiryField", "website", event.currentTarget.value)}
+                />
+              </div>
+              <div id="inquiry-status" className="inquiryStatus" aria-live="polite">
+                {ui.inquiryStatus}
+              </div>
             </div>
-          </div>
+          </ModalCard>
         </form>
       </dialog>
 
@@ -586,37 +578,28 @@ export function AppShell() {
         }}
       >
         <form className="twModal" id="winner-form" onSubmit={(event) => event.preventDefault()}>
-          <div className="twModal__card">
-            <div className="twModal__header">
-              <div className="twModal__headText">
-                <div className="twModal__title">마지막 결과</div>
-                <div className="twModal__desc">마지막으로 도착한 공을 확인하세요.</div>
-              </div>
-              <button className="twModal__close" type="button" aria-label="닫기" onClick={() => runAction("closeWinner")}>
-                ×
-              </button>
-            </div>
-
-            <div className="twModal__body">
-              <div className="twWinner">
-                <div className="twWinner__thumb">
-                  <img id="winner-img" src={winner?.img || "data:,"} alt={winner?.name || ""} />
-                </div>
-                <div className="twWinner__copy">
-                  <div className="twWinner__k">마지막 도착</div>
-                  <div className="twWinner__v" id="winner-name">
-                    {winner?.name || "-"}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="twModal__footer">
+          <ModalCard
+            title="마지막 결과"
+            description="마지막으로 도착한 공을 확인하세요."
+            onClose={() => runAction("closeWinner")}
+            footer={
               <Button variant="primary" type="button" onClick={() => runAction("closeWinner")}>
                 확인
               </Button>
+            }
+          >
+            <div className="twWinner">
+              <div className="twWinner__thumb">
+                <img id="winner-img" src={winner?.img || "data:,"} alt={winner?.name || ""} />
+              </div>
+              <div className="twWinner__copy">
+                <div className="twWinner__k">마지막 도착</div>
+                <div className="twWinner__v" id="winner-name">
+                  {winner?.name || "-"}
+                </div>
+              </div>
             </div>
-          </div>
+          </ModalCard>
         </form>
       </dialog>
     </>

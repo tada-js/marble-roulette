@@ -45,6 +45,11 @@ npm run typecheck
 npm run build:vite
 ```
 
+## Design System
+
+- 가이드: `docs/design-system.md`
+- 공통 UI 컴포넌트: `src/ui-react/components`
+
 ## GitHub Flow
 
 - `main`: 배포/릴리즈 기준
