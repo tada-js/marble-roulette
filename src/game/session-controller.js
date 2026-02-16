@@ -18,7 +18,6 @@
  *   };
  *   renderer: { clearCameraOverride?: () => void };
  *   viewState: { tailFocusOn: boolean };
- *   viewLockEl?: HTMLInputElement | null;
  *   getTotalSelectedCount: (state: unknown) => number;
  *   makeRng: (seed: number) => unknown;
  *   startGame: (state: unknown) => void;
@@ -37,7 +36,6 @@ export function createSessionController(opts) {
     state,
     renderer,
     viewState,
-    viewLockEl,
     getTotalSelectedCount,
     makeRng,
     startGame,
@@ -60,7 +58,6 @@ export function createSessionController(opts) {
     state.paused = false;
     viewState.tailFocusOn = true;
     renderer.clearCameraOverride?.();
-    if (viewLockEl) viewLockEl.checked = true;
   }
 
   function tryStart() {

@@ -17,7 +17,7 @@ import { mountCoordModeController } from "./coord-mode-controller.js";
  *   minimap?: HTMLCanvasElement | null;
  *   minimapHintEl?: HTMLElement | null;
  *   minimapTitleEl?: HTMLElement | null;
- *   viewLockEl?: HTMLInputElement | null;
+ *   onTailFocusChange?: (isOn: boolean) => void;
  *   canvas?: HTMLCanvasElement | null;
  *   canvasCoordReadoutEl?: HTMLElement | null;
  *   canvasCoordCopyBtn?: HTMLButtonElement | null;
@@ -33,7 +33,7 @@ export function mountViewControls(opts) {
     minimap,
     minimapHintEl,
     minimapTitleEl,
-    viewLockEl,
+    onTailFocusChange = () => {},
     canvas,
     canvasCoordReadoutEl,
     canvasCoordCopyBtn,
@@ -47,7 +47,7 @@ export function mountViewControls(opts) {
     viewState,
     minimap,
     minimapHintEl,
-    viewLockEl,
+    onTailFocusChange,
     updateControls,
   });
 

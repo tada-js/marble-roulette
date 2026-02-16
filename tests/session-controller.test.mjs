@@ -15,7 +15,6 @@ function makeCallCounter() {
 test("session controller starts a run and applies default run view", () => {
   const state = { mode: "menu", winner: null, paused: true };
   const viewState = { tailFocusOn: false };
-  const viewLockEl = { checked: false };
 
   const startCounter = makeCallCounter();
   const dropCounter = makeCallCounter();
@@ -28,7 +27,6 @@ test("session controller starts a run and applies default run view", () => {
     state,
     renderer: { clearCameraOverride: clearCameraCounter.fn },
     viewState,
-    viewLockEl,
     getTotalSelectedCount: () => 5,
     makeRng: () => ({ next: 1 }),
     startGame: (s) => {
@@ -51,7 +49,6 @@ test("session controller starts a run and applies default run view", () => {
   assert.equal(state.mode, "playing");
   assert.equal(state.paused, false);
   assert.equal(viewState.tailFocusOn, true);
-  assert.equal(viewLockEl.checked, true);
 
   assert.equal(startCounter.calls.length, 1);
   assert.equal(dropCounter.calls.length, 1);
@@ -69,7 +66,6 @@ test("session controller toggles pause only while in active run", () => {
     state,
     renderer: {},
     viewState: { tailFocusOn: true },
-    viewLockEl: null,
     getTotalSelectedCount: () => 1,
     makeRng: () => ({}),
     startGame: () => {},

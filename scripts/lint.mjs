@@ -1,13 +1,15 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { transformSync } from "esbuild";
 
 const root = path.resolve(new URL("..", import.meta.url).pathname);
-const exts = new Set([".js", ".mjs"]);
+const exts = new Set([".js", ".mjs", ".jsx"]);
 
 function walk(dir, out) {
   for (const ent of readdirSync(dir)) {
-    if (ent === "node_modules" || ent === ".git" || ent === "output") continue;
+    if (ent === "node_modules" || ent === ".git" || ent === "output" || ent === "dist-vite" || ent === ".next") continue;
     const p = path.join(dir, ent);
     const st = statSync(p);
     if (st.isDirectory()) walk(p, out);
@@ -21,7 +23,13 @@ walk(root, files);
 let ok = true;
 for (const f of files) {
   try {
-    execFileSync(process.execPath, ["--check", f], { stdio: "pipe" });
+    const ext = path.extname(f);
+    if (ext === ".jsx") {
+      const source = readFileSync(f, "utf8");
+      transformSync(source, { loader: "jsx", format: "esm" });
+    } else {
+      execFileSync(process.execPath, ["--check", f], { stdio: "pipe" });
+    }
   } catch (e) {
     ok = false;
     const msg = e?.stderr?.toString?.() || e?.message || String(e);
@@ -31,4 +39,3 @@ for (const f of files) {
 
 if (!ok) process.exit(1);
 console.log(`[lint] ok (${files.length} files)`);
-

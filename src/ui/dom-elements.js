@@ -4,17 +4,8 @@
 export function getAppElements() {
   return {
     canvas: document.getElementById("game"),
-    startBtn: document.getElementById("start-btn"),
-    pauseBtn: document.getElementById("pause-btn"),
-    settingsBtn: document.getElementById("settings-btn"),
     inquiryBtn: document.getElementById("inquiry-btn"),
-    bgmBtn: document.getElementById("bgm-btn"),
-    bgmSettingsBtn: document.getElementById("bgm-settings-btn"),
-    bgmMenu: document.getElementById("bgm-menu"),
-    winnerBtn: document.getElementById("winner-btn"),
-    ballsEl: document.getElementById("balls"),
     minimap: document.getElementById("minimap"),
-    viewLockEl: document.getElementById("view-lock"),
     minimapHintEl: document.getElementById("minimap-hint"),
     canvasCoordReadoutEl: document.getElementById("canvas-coord-readout"),
     canvasCoordCopyBtn: document.getElementById("canvas-coord-copy"),

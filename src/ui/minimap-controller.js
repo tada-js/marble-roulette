@@ -12,7 +12,7 @@
  *   viewState: { tailFocusOn: boolean };
  *   minimap?: HTMLCanvasElement | null;
  *   minimapHintEl?: HTMLElement | null;
- *   viewLockEl?: HTMLInputElement | null;
+ *   onTailFocusChange?: (isOn: boolean) => void;
  *   updateControls?: () => void;
  }} opts
  */
@@ -24,7 +24,7 @@ export function mountMinimapController(opts) {
     viewState,
     minimap,
     minimapHintEl,
-    viewLockEl,
+    onTailFocusChange = () => {},
     updateControls = () => {},
   } = opts;
 
@@ -106,7 +106,7 @@ export function mountMinimapController(opts) {
   if (minimap) {
     const onPick = (e) => {
       viewState.tailFocusOn = false;
-      if (viewLockEl) viewLockEl.checked = false;
+      onTailFocusChange(false);
       const rect = minimap.getBoundingClientRect();
       const y = (e.clientY - rect.top) / rect.height;
       const v = renderer.getViewState?.();
@@ -121,15 +121,6 @@ export function mountMinimapController(opts) {
       onPick(e);
     });
   }
-
-  viewLockEl?.addEventListener("change", () => {
-    const v = renderer.getViewState?.();
-    if (!v) return;
-    viewState.tailFocusOn = !!viewLockEl.checked;
-    if (viewState.tailFocusOn) renderer.clearCameraOverride?.();
-    else renderer.setCameraOverrideY?.(v.cameraY);
-    updateControls();
-  });
 
   setInterval(drawMinimap, 100);
   return { drawMinimap };

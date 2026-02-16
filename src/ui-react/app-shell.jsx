@@ -1,8 +1,60 @@
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getUiActions, getUiSnapshot, subscribeUi } from "../app/ui-store.js";
+import { Button, IconButton } from "./components/button.jsx";
+
+function useUiSnapshot() {
+  return useSyncExternalStore(subscribeUi, getUiSnapshot, getUiSnapshot);
+}
+
 /**
  * React UI shell for the game.
- * IDs/classes are preserved so existing controllers can bind without engine/render changes.
+ * Engine/render logic stays in existing vanilla modules.
  */
 export function AppShell() {
+  const ui = useUiSnapshot();
+  const [bgmMenuOpen, setBgmMenuOpen] = useState(false);
+  const bgmControlRef = useRef(null);
+
+  useEffect(() => {
+    if (!bgmMenuOpen) return;
+
+    /**
+     * @param {PointerEvent} event
+     */
+    function onPointerDown(event) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (bgmControlRef.current?.contains(target)) return;
+      setBgmMenuOpen(false);
+    }
+
+    /**
+     * @param {KeyboardEvent} event
+     */
+    function onKeyDown(event) {
+      if (event.key !== "Escape") return;
+      setBgmMenuOpen(false);
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [bgmMenuOpen]);
+
+  /**
+   * @template {keyof ReturnType<typeof getUiActions>} K
+   * @param {K} key
+   * @param {...Parameters<ReturnType<typeof getUiActions>[K]>} args
+   */
+  function runAction(key, ...args) {
+    const actions = getUiActions();
+    const fn = actions[key];
+    if (typeof fn === "function") fn(...args);
+  }
+
   return (
     <>
       <div id="app">
@@ -11,39 +63,66 @@ export function AppShell() {
             <div className="brand__title">데구르르 (Degururu)</div>
             <div className="brand__subtitle">공으로 즐기는 핀볼 사다리</div>
           </div>
+
           <div className="topbar__center">
-            <button id="start-btn" className="btn btn--primary topbar__start" type="button">
-              게임 시작
-            </button>
-            <button id="pause-btn" className="btn btn--ghost topbar__pause" type="button" disabled>
-              일시정지
-            </button>
+            <Button
+              id="start-btn"
+              variant="primary"
+              className="topbar__start"
+              disabled={ui.startDisabled}
+              onClick={() => runAction("handleStartClick")}
+            >
+              {ui.startLabel}
+            </Button>
+            <Button
+              id="pause-btn"
+              variant="ghost"
+              className="topbar__pause"
+              disabled={ui.pauseDisabled}
+              ariaPressed={ui.pausePressed}
+              onClick={() => runAction("togglePause")}
+            >
+              {ui.pauseLabel}
+            </Button>
           </div>
+
           <div className="topbar__right">
-            <div className="bgmControl">
-              <button id="bgm-btn" className="bgmControl__toggle" type="button" aria-pressed="false">
-                <span data-bgm-label>BGM 끔</span>
-              </button>
+            <div className="bgmControl" ref={bgmControlRef}>
               <button
+                id="bgm-btn"
+                className="bgmControl__toggle"
+                type="button"
+                aria-pressed={ui.bgmOn ? "true" : "false"}
+                onClick={() => runAction("toggleBgm")}
+              >
+                <span data-bgm-label>{ui.bgmOn ? "BGM 켬" : "BGM 끔"}</span>
+              </button>
+
+              <IconButton
                 id="bgm-settings-btn"
                 className="bgmControl__gear"
-                type="button"
-                aria-label="BGM 트랙 선택"
-                aria-haspopup="menu"
-                aria-expanded="false"
+                ariaLabel="BGM 트랙 선택"
+                ariaHasPopup="menu"
+                ariaExpanded={bgmMenuOpen}
                 title="BGM 선택"
+                onClick={() => setBgmMenuOpen((prev) => !prev)}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M19.43 12.98a7.83 7.83 0 0 0 .06-.98 7.83 7.83 0 0 0-.06-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.6-.22l-2.49 1a7.14 7.14 0 0 0-1.69-.98l-.38-2.65A.5.5 0 0 0 14 1h-4a.5.5 0 0 0-.49.42l-.38 2.65c-.6.23-1.16.56-1.68.98l-2.5-1a.5.5 0 0 0-.6.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65A7.83 7.83 0 0 0 4.51 12c0 .33.02.66.06.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46a.5.5 0 0 0 .6.22l2.5-1c.52.42 1.08.75 1.68.98l.38 2.65A.5.5 0 0 0 10 23h4a.5.5 0 0 0 .49-.42l.38-2.65c.6-.23 1.16-.56 1.69-.98l2.49 1a.5.5 0 0 0 .6-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z" />
                 </svg>
-              </button>
-              <div id="bgm-menu" className="bgmMenu" role="menu" hidden>
+              </IconButton>
+
+              <div id="bgm-menu" className="bgmMenu" role="menu" hidden={!bgmMenuOpen}>
                 <button
                   type="button"
                   className="bgmMenu__item"
                   data-bgm-track="bgm_1"
                   role="menuitemradio"
-                  aria-checked="true"
+                  aria-checked={ui.bgmTrack === "bgm_1" ? "true" : "false"}
+                  onClick={() => {
+                    runAction("setBgmTrack", "bgm_1");
+                    setBgmMenuOpen(false);
+                  }}
                 >
                   BGM 1
                 </button>
@@ -52,15 +131,20 @@ export function AppShell() {
                   className="bgmMenu__item"
                   data-bgm-track="bgm_2"
                   role="menuitemradio"
-                  aria-checked="false"
+                  aria-checked={ui.bgmTrack === "bgm_2" ? "true" : "false"}
+                  onClick={() => {
+                    runAction("setBgmTrack", "bgm_2");
+                    setBgmMenuOpen(false);
+                  }}
                 >
                   BGM 2
                 </button>
               </div>
             </div>
-            <button id="inquiry-btn" className="btn btn--ghost" type="button">
+
+            <Button id="inquiry-btn" variant="ghost">
               문의
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -76,7 +160,15 @@ export function AppShell() {
                   title="켜면 후미 공을 따라갑니다. 끄면 자유 시점으로 미니맵으로 이동합니다."
                 >
                   <span className="switch__label">시점 고정</span>
-                  <input id="view-lock" className="switch__input" type="checkbox" role="switch" disabled />
+                  <input
+                    id="view-lock"
+                    className="switch__input"
+                    type="checkbox"
+                    role="switch"
+                    checked={ui.viewLockChecked}
+                    disabled={ui.viewLockDisabled}
+                    onChange={(event) => runAction("toggleViewLock", event.currentTarget.checked)}
+                  />
                   <span className="switch__track" aria-hidden="true">
                     <span className="switch__thumb"></span>
                   </span>
@@ -87,15 +179,68 @@ export function AppShell() {
                 미니맵을 클릭해 이동. 후미 추적으로 자동 추적을 재개합니다.
               </div>
             </div>
+
             <div className="hud__actions">
-              <button id="settings-btn" className="btn btn--ghost" type="button">
+              <Button id="settings-btn" variant="ghost" onClick={() => runAction("openSettings")}>
                 공 설정
-              </button>
-              <button id="winner-btn" className="btn btn--ghost" type="button" disabled>
+              </Button>
+              <Button
+                id="winner-btn"
+                variant="ghost"
+                disabled={ui.winnerDisabled}
+                onClick={() => runAction("openWinner")}
+              >
                 마지막 결과
-              </button>
+              </Button>
             </div>
-            <div className="balls" id="balls"></div>
+
+            <div className="balls" id="balls">
+              {ui.balls.map((ball) => (
+                <div key={ball.id} className="ball-card" role="group">
+                  <div className="ball-thumb">
+                    <img alt={ball.name} src={ball.imageDataUrl} />
+                  </div>
+
+                  <div className="ball-meta">
+                    <div className="ball-name tooltip" data-tip={ball.name} aria-label={ball.name}>
+                      <span className="ball-name__text">{ball.name}</span>
+                    </div>
+                    <div className="ball-id">{ball.id}</div>
+                  </div>
+
+                  <div className="ball-qty">
+                    <Button
+                      variant="ghost"
+                      className="ball-qty__btn"
+                      disabled={ball.locked}
+                      onClick={() => runAction("adjustBallCount", ball.id, -1)}
+                    >
+                      -
+                    </Button>
+                    <input
+                      className="ball-qty__count"
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="99"
+                      step="1"
+                      value={String(ball.count)}
+                      aria-label={`${ball.name} 개수`}
+                      disabled={ball.locked}
+                      onChange={(event) => runAction("setBallCount", ball.id, Number(event.currentTarget.value))}
+                    />
+                    <Button
+                      variant="ghost"
+                      className="ball-qty__btn"
+                      disabled={ball.locked}
+                      onClick={() => runAction("adjustBallCount", ball.id, 1)}
+                    >
+                      +
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="board">
@@ -104,9 +249,9 @@ export function AppShell() {
               <div className="board__coordText" id="canvas-coord-readout">
                 xFrac: -, yFrac: -
               </div>
-              <button id="canvas-coord-copy" className="btn btn--ghost board__copy" type="button" disabled>
+              <Button id="canvas-coord-copy" variant="ghost" className="board__copy" disabled>
                 좌표 복사
-              </button>
+              </Button>
             </div>
           </div>
         </main>
@@ -130,15 +275,15 @@ export function AppShell() {
             </div>
 
             <div className="twModal__footer">
-              <button id="add-ball" className="btn btn--ghost" type="button">
+              <Button id="add-ball" variant="ghost" type="button">
                 공 추가
-              </button>
-              <button id="restore-defaults" className="btn btn--ghost" type="button">
+              </Button>
+              <Button id="restore-defaults" variant="ghost" type="button">
                 기본값 복원
-              </button>
-              <button className="btn btn--primary" value="close" type="submit">
+              </Button>
+              <Button variant="primary" type="submit">
                 닫기
-              </button>
+              </Button>
             </div>
           </div>
         </form>
@@ -210,9 +355,9 @@ export function AppShell() {
             </div>
 
             <div className="twModal__footer">
-              <button id="inquiry-send" className="btn btn--primary" type="submit">
+              <Button id="inquiry-send" variant="primary" type="submit">
                 메일 보내기
-              </button>
+              </Button>
             </div>
           </div>
         </form>
@@ -244,9 +389,9 @@ export function AppShell() {
             </div>
 
             <div className="twModal__footer">
-              <button className="btn btn--primary" value="close" type="submit">
+              <Button variant="primary" type="submit">
                 확인
-              </button>
+              </Button>
             </div>
           </div>
         </form>

@@ -13,6 +13,12 @@
   --danger: #ff4d6d;
   --shadow: rgba(0, 0, 0, 0.35);
   --radius: 16px;
+  --ctrl-h-sm: 34px;
+  --ctrl-h-md: 40px;
+  --ctrl-h-lg: 46px;
+  --ctrl-px-sm: 10px;
+  --ctrl-px-md: 12px;
+  --ctrl-px-lg: 14px;
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
     "Segoe UI Emoji";
@@ -290,12 +296,20 @@ canvas#game {
   color: var(--ink);
   background: rgba(255, 255, 255, 0.06);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 0 var(--ctrl-px-md);
+  min-height: var(--ctrl-h-md);
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 10px 30px var(--shadow);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn--sm { min-height: var(--ctrl-h-sm); padding: 0 var(--ctrl-px-sm); border-radius: 10px; font-size: 12px; }
+.btn--md { min-height: var(--ctrl-h-md); padding: 0 var(--ctrl-px-md); }
+.btn--lg { min-height: var(--ctrl-h-lg); padding: 0 var(--ctrl-px-lg); border-radius: 14px; }
 
 .btn--primary {
   border-color: rgba(69, 243, 195, 0.45);
@@ -317,6 +331,25 @@ canvas#game {
 .btn--danger {
   border-color: rgba(255, 77, 109, 0.55);
   background: linear-gradient(180deg, rgba(255, 77, 109, 0.30), rgba(255, 77, 109, 0.12));
+}
+
+.iconBtn {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.04);
+  color: var(--ink);
+  border-radius: 10px;
+  width: var(--ctrl-h-md);
+  height: var(--ctrl-h-md);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+.iconBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+.iconBtn:hover:not(:disabled) {
+  border-color: rgba(255,255,255,0.30);
+  background: rgba(255,255,255,0.16);
 }
 
 .hud > * + * { margin-top: 10px; }
@@ -419,7 +452,7 @@ canvas#game {
   line-height: 1.35;
   white-space: pre-line;
 }
-/* Coordinate tooling is hidden by default; enable via secret toggle (see src/main.js). */
+/* Coordinate tooling is hidden by default; enable via secret toggle (see src/main.jsx). */
 .board__coords { display: none; }
 :root.coord-mode .board__coords { display: flex; }
 

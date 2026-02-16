@@ -9,26 +9,19 @@ const BGM_VOLUME = 0.3;
  * Create BGM controller (MP3 tracks).
  *
  * @param {{
- *   button?: HTMLButtonElement | null;
- *   settingsButton?: HTMLButtonElement | null;
- *   menu?: HTMLElement | null;
  *   storageKey?: string;
  *   trackStorageKey?: string;
+ *   onStateChange?: (state: { on: boolean; track: string }) => void;
  * }} opts
  */
 export function createAudioController(opts = {}) {
   const {
-    button = null,
-    settingsButton = null,
-    menu = null,
     storageKey = "bgmOn",
     trackStorageKey = "bgmTrack",
+    onStateChange = () => {},
   } = opts;
 
-  const labelEl = button?.querySelector("[data-bgm-label]") || null;
-  const menuItems = menu ? Array.from(menu.querySelectorAll("[data-bgm-track]")) : [];
   const trackMap = new WeakMap();
-
   const bgm = {
     on: false,
     track: DEFAULT_TRACK,
@@ -36,6 +29,10 @@ export function createAudioController(opts = {}) {
     _armed: false,
     _resumeHandler: null,
   };
+
+  function emitState() {
+    onStateChange({ on: bgm.on, track: bgm.track });
+  }
 
   /**
    * @param {unknown} value
@@ -54,6 +51,7 @@ export function createAudioController(opts = {}) {
     audio.preload = "auto";
     audio.loop = true;
     audio.volume = BGM_VOLUME;
+
     audio.addEventListener("error", () => {
       if (sourceIndex >= sources.length - 1) return;
       sourceIndex += 1;
@@ -95,6 +93,7 @@ export function createAudioController(opts = {}) {
     } catch {
       // ignore
     }
+
     bgm.audio = createAudio(bgm.track);
   }
 
@@ -140,37 +139,6 @@ export function createAudioController(opts = {}) {
     window.addEventListener("keydown", tryResume);
   }
 
-  function syncToggleLabel() {
-    if (!button) return;
-    button.setAttribute("aria-pressed", bgm.on ? "true" : "false");
-    const label = bgm.on ? "BGM 켬" : "BGM 끔";
-    if (labelEl) labelEl.textContent = label;
-    else button.textContent = label;
-  }
-
-  function syncMenuSelection() {
-    for (const item of menuItems) {
-      const trackId = item.dataset.bgmTrack;
-      const selected = trackId === bgm.track;
-      item.setAttribute("aria-checked", selected ? "true" : "false");
-    }
-  }
-
-  /**
-   * @param {boolean} open
-   */
-  function setMenuOpen(open) {
-    if (!menu || !settingsButton) return;
-    const next = !!open;
-    menu.hidden = !next;
-    settingsButton.setAttribute("aria-expanded", next ? "true" : "false");
-  }
-
-  function toggleMenu() {
-    if (!menu) return;
-    setMenuOpen(menu.hidden);
-  }
-
   /**
    * @param {string} trackId
    * @param {{autoplay?: boolean}} [opts]
@@ -178,15 +146,16 @@ export function createAudioController(opts = {}) {
   function setTrack(trackId, opts = {}) {
     const { autoplay = true } = opts;
     if (!isValidTrack(trackId)) return;
+
     bgm.track = trackId;
     try {
       localStorage.setItem(trackStorageKey, bgm.track);
     } catch {
       // ignore
     }
-    syncMenuSelection();
 
     ensureAudioForTrack();
+    emitState();
 
     if (!bgm.on) return;
     if (autoplay) void play();
@@ -205,7 +174,8 @@ export function createAudioController(opts = {}) {
     } catch {
       // ignore
     }
-    syncToggleLabel();
+
+    emitState();
 
     if (bgm.on) {
       if (autoplay) void play();
@@ -231,7 +201,6 @@ export function createAudioController(opts = {}) {
     } catch {
       // ignore
     }
-    syncMenuSelection();
 
     try {
       const v = localStorage.getItem(storageKey);
@@ -242,46 +211,17 @@ export function createAudioController(opts = {}) {
     }
 
     setOn(nextOn, { autoplay: false });
+    emitState();
   }
 
-  settingsButton?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    toggleMenu();
-  });
-
-  document.addEventListener("pointerdown", (event) => {
-    if (!menu || menu.hidden) return;
-    const target = event.target;
-    if (!(target instanceof Node)) return;
-    if (menu.contains(target)) return;
-    if (settingsButton?.contains(target)) return;
-    setMenuOpen(false);
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    setMenuOpen(false);
-  });
-
-  for (const item of menuItems) {
-    item.addEventListener("click", () => {
-      const trackId = item.dataset.bgmTrack;
-      if (!isValidTrack(trackId)) return;
-      setTrack(trackId, { autoplay: true });
-      setMenuOpen(false);
-    });
-  }
-
-  syncToggleLabel();
-  syncMenuSelection();
-  setMenuOpen(false);
+  emitState();
 
   return {
     isOn: () => bgm.on,
+    getTrack: () => bgm.track,
     setOn,
     toggle,
     setTrack,
-    getTrack: () => bgm.track,
     restoreFromStorage,
   };
 }
