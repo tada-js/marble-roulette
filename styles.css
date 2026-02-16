@@ -60,6 +60,9 @@ html, body {
 }
 
 .topbar {
+  position: relative;
+  z-index: 120;
+  isolation: isolate;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
@@ -86,6 +89,91 @@ html, body {
   gap: 10px;
   flex-wrap: wrap;
   justify-self: end;
+}
+.bgmControl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  box-shadow: none;
+}
+.bgmControl:hover {
+  border-color: rgba(255,255,255,0.34);
+  background: rgba(255,255,255,0.14);
+}
+.bgmControl__toggle {
+  appearance: none;
+  border: 0;
+  border-right: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: var(--ink);
+  min-width: 96px;
+  height: 40px;
+  padding: 0 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.bgmControl__gear {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,0.9);
+  width: 38px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+.bgmControl__gear:hover {
+  background: rgba(255,255,255,0.18);
+}
+.bgmControl__gear svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+.bgmControl__toggle:focus-visible,
+.bgmControl__gear:focus-visible {
+  outline: none;
+  background: rgba(69,243,195,0.18);
+}
+.bgmMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 140px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: linear-gradient(180deg, rgba(11, 18, 32, 0.98), rgba(16, 26, 48, 0.96));
+  box-shadow: 0 22px 55px rgba(0,0,0,0.45);
+  padding: 6px;
+  z-index: 999;
+}
+.bgmMenu__item {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(234, 241, 255, 0.92);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.bgmMenu__item[aria-checked="true"] {
+  background: rgba(69, 243, 195, 0.22);
+  color: #fff;
+}
+.bgmMenu__item:hover {
+  background: rgba(255,255,255,0.12);
 }
 .topbar__pause {
   min-width: 86px;
@@ -141,6 +229,8 @@ html, body {
 }
 
 .stage {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 320px 1fr;
   height: 100%;

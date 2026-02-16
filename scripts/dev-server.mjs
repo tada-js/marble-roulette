@@ -32,6 +32,7 @@ const mime = new Map([
   [".jpg", "image/jpeg"],
   [".jpeg", "image/jpeg"],
   [".webp", "image/webp"],
+  [".mp3", "audio/mpeg"],
   [".ico", "image/x-icon"]
 ]);
 
@@ -70,11 +71,17 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const reqPath = pathname === "/" ? "/index.html" : url;
-  const abs = safePath(reqPath);
-  if (!abs) {
+  const reqPath = pathname === "/" ? "/index.html" : pathname;
+  const candidates = [safePath(reqPath), safePath(`/public${reqPath}`)].filter(Boolean);
+  if (!candidates.length) {
     res.writeHead(400);
     res.end("Bad request");
+    return;
+  }
+  const abs = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!abs) {
+    res.writeHead(404);
+    res.end("Not found");
     return;
   }
 

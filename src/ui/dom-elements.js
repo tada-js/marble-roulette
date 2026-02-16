@@ -9,6 +9,8 @@ export function getAppElements() {
     settingsBtn: document.getElementById("settings-btn"),
     inquiryBtn: document.getElementById("inquiry-btn"),
     bgmBtn: document.getElementById("bgm-btn"),
+    bgmSettingsBtn: document.getElementById("bgm-settings-btn"),
+    bgmMenu: document.getElementById("bgm-menu"),
     winnerBtn: document.getElementById("winner-btn"),
     ballsEl: document.getElementById("balls"),
     minimap: document.getElementById("minimap"),
