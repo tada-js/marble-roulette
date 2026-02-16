@@ -542,8 +542,10 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
 
     // Marbles (pending + active).
     for (const m of [...(state.pending || []), ...state.marbles]) {
-      // Hide finished marbles to avoid clutter when 100+ arrive.
-      if (m.done) continue;
+      const showFinishedBadge = board.slotCount === 1 && m.done && !!m.result?.label;
+      // Hide finished marbles to avoid clutter when 100+ arrive,
+      // but keep single-slot arrival-order badges visible.
+      if (m.done && !showFinishedBadge) continue;
       const meta = ballsCatalog.find((b) => b.id === m.ballId);
       const img = imagesById.get(m.ballId);
       const r = m.r;
@@ -579,7 +581,7 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
       ctx.restore();
 
       // Arrival order badge for the single-slot mode.
-      if (board.slotCount === 1 && m.done && m.result?.label) {
+      if (showFinishedBadge && m.result?.label) {
         const txt = String(m.result.label);
         const fontSize = Math.max(11, Math.min(18, r * 0.95));
         ctx.font = `800 ${fontSize}px ui-monospace, Menlo, monospace`;

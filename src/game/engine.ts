@@ -1422,11 +1422,9 @@ function resolveWallSegments(
     for (let i = 0; i < segments.length; i++) candidates.push(i);
   }
 
-  // Avoid doing the same segment twice when bins overlap.
-  const uniq = candidates.length > 64 ? new Set(candidates) : null;
-  const it = uniq ? uniq.values() : candidates;
-
-  for (const idx of it) {
+  // Always dedupe to avoid resolving the same segment multiple times when bins overlap.
+  const uniq = new Set(candidates);
+  for (const idx of uniq.values()) {
     const s = segments[idx];
     if (m.y + m.r < s.yMin - 2 || m.y - m.r > s.yMax + 2) continue;
     resolveCircleSegment(m, s, restitution);

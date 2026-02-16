@@ -550,6 +550,7 @@ function tryStart() {
   setResultText("");
   renderBallCards(); // disable +/- while playing
   updateControls();
+  fixedAccumulatorSec = 0;
   // Default to tail focus when a run starts.
   tailFocusOn = true;
   renderer.clearCameraOverride();
@@ -569,6 +570,7 @@ resetBtn.addEventListener("click", () => {
   resetGame(state);
   state._shownResultId = null;
   state._shownWinnerT = null;
+  fixedAccumulatorSec = 0;
   setResultText("");
   renderBallCards();
   renderer.clearCameraOverride();
@@ -620,9 +622,14 @@ document.addEventListener("keydown", async (e: KeyboardEvent) => {
   }
 });
 
+let fixedAccumulatorSec = 0;
+
 function tickFixed(ms: number): void {
   const dt = 1 / 60;
-  const steps = Math.max(1, Math.round((ms / 1000) / dt));
+  const sec = Math.max(0, ms / 1000);
+  const total = fixedAccumulatorSec + sec;
+  const steps = Math.floor(total / dt);
+  fixedAccumulatorSec = total - steps * dt;
   for (let i = 0; i < steps; i++) step(state, dt);
   renderer.draw(state, ballsCatalog, imagesById);
   onAfterFrame();
