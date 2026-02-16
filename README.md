@@ -21,6 +21,7 @@ npm run dev
 ```
 
 브라우저에서 `http://localhost:5173` 접속.
+`npm run dev`는 Vite + React UI 셸(엔진/렌더는 기존 JS 유지)로 실행됩니다.
 
 문의 메일 전송(서버 API) 설정:
 
@@ -33,14 +34,6 @@ cp .env.example .env.local
 - `INQUIRY_TO_EMAIL`: 문의 수신 주소
 - `RESEND_API_KEY`: Resend API 키
 - `INQUIRY_FROM_EMAIL`: 발신 주소(검증 도메인 권장)
-
-Vite 기반 점진 마이그레이션(1단계) 개발 서버:
-
-```bash
-npm run dev:vite
-```
-
-브라우저에서 `http://localhost:5173` 접속.
 
 ## Tests
 

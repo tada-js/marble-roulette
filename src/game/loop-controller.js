@@ -2,7 +2,7 @@
  * Create a frame/update loop controller.
  *
  * Keeps fixed-step simulation, resize scheduling, and requestAnimationFrame loop
- * in one place so `main.js` can focus on composition.
+ * in one place so the app entry can focus on composition.
  *
  * @param {{
  *   state: { mode?: string; paused?: boolean };
