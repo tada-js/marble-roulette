@@ -76,7 +76,6 @@ export function AppShell() {
   const countdownTimersRef = useRef<number[]>([]);
   const filePickerActiveRef = useRef(false);
 
-  const inquiryNameRef = useRef<HTMLInputElement | null>(null);
   const inquiryEmailRef = useRef<HTMLInputElement | null>(null);
   const inquirySubjectRef = useRef<HTMLInputElement | null>(null);
   const inquiryMessageRef = useRef<HTMLTextAreaElement | null>(null);
@@ -161,7 +160,7 @@ export function AppShell() {
   useEffect(() => {
     if (!ui.inquiryOpen) return;
     const t = setTimeout(() => {
-      const el = inquiryNameRef.current;
+      const el = inquiryEmailRef.current;
       if (!el) return;
       try {
         el.focus({ preventScroll: true });
@@ -176,7 +175,6 @@ export function AppShell() {
 
   function focusInquiryField(field: RequiredInquiryField) {
     const map = {
-      name: inquiryNameRef.current,
       email: inquiryEmailRef.current,
       subject: inquirySubjectRef.current,
       message: inquiryMessageRef.current,
@@ -487,7 +485,6 @@ export function AppShell() {
           <ModalCard
             size="md"
             title="문의하기"
-            description="문의 내용은 안전하게 보관되어 전송됩니다."
             onClose={() => runAction("closeInquiry")}
             footer={
               <Button id="inquiry-send" variant="primary" type="submit" disabled={ui.inquirySubmitting}>
@@ -496,23 +493,6 @@ export function AppShell() {
             }
           >
             <div className="inquiryForm">
-              <div className="field">
-                <label htmlFor="inq-name">
-                  <span className="field__required">*</span>이름
-                </label>
-                <input
-                  id="inq-name"
-                  name="name"
-                  type="text"
-                  maxLength={40}
-                  required
-                  autoComplete="name"
-                  placeholder="홍길동"
-                  value={ui.inquiryForm.name}
-                  ref={inquiryNameRef}
-                  onChange={(event) => runAction("setInquiryField", "name", event.currentTarget.value)}
-                />
-              </div>
               <div className="field">
                 <label htmlFor="inq-email">
                   <span className="field__required">*</span>이메일
@@ -563,6 +543,21 @@ export function AppShell() {
                 ></textarea>
                 <div className="inquiryCounter">
                   <span id="inq-message-count">{inquiryMessageLength}</span>/2000
+                </div>
+              </div>
+              <div className="field inquiryNotice">
+                <div className="inquiryNotice__meta">
+                  <span className="inquiryNotice__text">
+                    문의 응답을 위해 이메일, 제목, 내용이 수집됩니다. 보관기간 문의 처리 완료 후 최대 1년
+                  </span>
+                  <a
+                    className="inquiryNotice__link"
+                    href="/privacy-policy.html"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    개인정보 처리방침 보기
+                  </a>
                 </div>
               </div>
               <div className="inquiryHoneypot" aria-hidden="true">

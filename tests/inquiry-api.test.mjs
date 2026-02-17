@@ -58,7 +58,6 @@ test("inquiry api sends mail for a valid request", async () => {
   });
 
   const req = makeReq({
-    name: "테스터",
     email: "tester@example.com",
     subject: "문의 제목",
     message: "문의 본문은 최소 열 글자 이상입니다.",
@@ -86,7 +85,6 @@ test("inquiry api rejects disallowed origin", async () => {
   });
   const req = makeReq(
     {
-      name: "테스터",
       email: "tester@example.com",
       subject: "문의 제목",
       message: "문의 본문은 최소 열 글자 이상입니다.",
@@ -119,7 +117,6 @@ test("inquiry api rate limits repeated requests from same client fingerprint", a
   });
 
   const payload = {
-    name: "테스터",
     email: "tester@example.com",
     subject: "문의 제목",
     message: "문의 본문은 최소 열 글자 이상입니다.",

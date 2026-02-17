@@ -4,7 +4,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const XSS_RE = /<[^>]*>|javascript:|on\w+\s*=|data:text\/html/i;
 
 export const INQUIRY_LIMITS = Object.freeze({
-  name: 40,
   email: 120,
   subject: 80,
   message: 2000,
@@ -43,24 +42,21 @@ export function hasSuspiciousMarkup(value) {
 }
 
 /**
- * @param {{name: unknown; email: unknown; subject: unknown; message: unknown; website?: unknown;}} input
- * @returns {{ok: true; data: {name: string; email: string; subject: string; message: string; website: string}} | {ok: false; field: "name" | "email" | "subject" | "message"; message: string}}
+ * @param {{email: unknown; subject: unknown; message: unknown; website?: unknown;}} input
+ * @returns {{ok: true; data: {email: string; subject: string; message: string; website: string}} | {ok: false; field: "email" | "subject" | "message"; message: string}}
  */
 export function validateInquiryInput(input) {
-  const name = sanitizeSingleLine(input?.name, INQUIRY_LIMITS.name);
   const email = sanitizeSingleLine(input?.email, INQUIRY_LIMITS.email).toLowerCase();
   const subject = sanitizeSingleLine(input?.subject, INQUIRY_LIMITS.subject);
   const message = sanitizeMultiLine(input?.message, INQUIRY_LIMITS.message);
   const website = sanitizeSingleLine(input?.website, INQUIRY_LIMITS.website);
 
-  if (!name) return { ok: false, field: "name", message: "이름을 입력해 주세요." };
   if (!email) return { ok: false, field: "email", message: "이메일을 입력해 주세요." };
   if (!EMAIL_RE.test(email)) return { ok: false, field: "email", message: "이메일 형식이 올바르지 않습니다." };
   if (!subject) return { ok: false, field: "subject", message: "제목을 입력해 주세요." };
   if (!message) return { ok: false, field: "message", message: "내용을 입력해 주세요." };
 
   const fieldChecks = [
-    ["name", name],
     ["email", email],
     ["subject", subject],
     ["message", message],
@@ -72,12 +68,12 @@ export function validateInquiryInput(input) {
 
   return {
     ok: true,
-    data: { name, email, subject, message, website },
+    data: { email, subject, message, website },
   };
 }
 
 /**
- * @param {{name: string; email: string; subject: string; message: string; website: string; openedAt: number;}} payload
+ * @param {{email: string; subject: string; message: string; website: string; openedAt: number;}} payload
  * @param {{endpoint?: string}} [opts]
  */
 export async function submitInquiry(payload, opts = {}) {

@@ -3,8 +3,8 @@
  */
 const listeners = new Set<() => void>();
 
-export type InquiryField = "name" | "email" | "subject" | "message" | "website";
-export type RequiredInquiryField = Exclude<InquiryField, "website">;
+export type InquiryField = "email" | "subject" | "message" | "website";
+export type RequiredInquiryField = "email" | "subject" | "message";
 
 export type InquiryForm = {
   [K in InquiryField]: string;
@@ -146,7 +146,6 @@ const DEFAULT_SNAPSHOT: UiSnapshot = Object.freeze({
   inquirySubmitting: false,
   inquiryStatus: "",
   inquiryForm: Object.freeze({
-    name: "",
     email: "",
     subject: "",
     message: "",
@@ -264,7 +263,6 @@ function isEqualSnapshot(a: UiSnapshot, b: UiSnapshot) {
   const aInquiry = a.inquiryForm;
   const bInquiry = b.inquiryForm;
   if (
-    aInquiry.name !== bInquiry.name ||
     aInquiry.email !== bInquiry.email ||
     aInquiry.subject !== bInquiry.subject ||
     aInquiry.message !== bInquiry.message ||

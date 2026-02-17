@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import type { StatusTone } from "../../app/ui-store";
 import { Button, IconButton } from "./Button";
 import { AppIcon } from "./Icons";
@@ -64,6 +64,40 @@ export function TopBar(props: TopBarProps) {
   }, [statusTone]);
   const metaText = typeof statusMetaText === "string" && statusMetaText.trim() ? statusMetaText : null;
   const isFastMode = speedMultiplier >= 2;
+  const runActionButtons: ReactNode[] = [];
+
+  if (quickFinishVisible) {
+    runActionButtons.push(
+      <Button
+        key="quick-finish"
+        id="finish-now-btn"
+        variant="ghost"
+        size="sm"
+        className="topbar__quickFinish"
+        disabled={quickFinishDisabled}
+        onClick={onQuickFinish}
+      >
+        {quickFinishLabel}
+      </Button>
+    );
+  }
+
+  if (stopRunVisible) {
+    runActionButtons.push(
+      <Button
+        key="stop-run"
+        id="stop-run-btn"
+        variant="danger"
+        size="sm"
+        className="topbar__stop"
+        disabled={stopRunDisabled}
+        title="진행을 중지하고 초기화"
+        onClick={onStopRun}
+      >
+        중지
+      </Button>
+    );
+  }
 
   return (
     <header className="topbar">
@@ -93,30 +127,10 @@ export function TopBar(props: TopBarProps) {
           <span className="statusBadge__label">{statusLabel}</span>
           {metaText ? <span className="statusBadge__meta">{metaText}</span> : null}
         </div>
-        {quickFinishVisible ? (
-          <Button
-            id="finish-now-btn"
-            variant="ghost"
-            size="sm"
-            className="topbar__quickFinish"
-            disabled={quickFinishDisabled}
-            onClick={onQuickFinish}
-          >
-            {quickFinishLabel}
-          </Button>
-        ) : null}
-        {stopRunVisible ? (
-          <Button
-            id="stop-run-btn"
-            variant="danger"
-            size="sm"
-            className="topbar__stop"
-            disabled={stopRunDisabled}
-            title="진행을 중지하고 초기화"
-            onClick={onStopRun}
-          >
-            중지
-          </Button>
+        {runActionButtons.length > 0 ? (
+          <div className="topbar__runActions">
+            {runActionButtons}
+          </div>
         ) : null}
       </div>
 

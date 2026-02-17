@@ -45,7 +45,6 @@ import type {
 } from "./ui-store";
 
 const EMPTY_INQUIRY_FORM = Object.freeze({
-  name: "",
   email: "",
   subject: "",
   message: "",
@@ -80,7 +79,6 @@ type InquiryValidationResult =
   | {
       ok: true;
       data: {
-        name: string;
         email: string;
         subject: string;
         message: string;
@@ -89,7 +87,7 @@ type InquiryValidationResult =
     }
   | {
       ok: false;
-      field: "name" | "email" | "subject" | "message";
+      field: "email" | "subject" | "message";
       message: string;
     };
 

@@ -294,7 +294,6 @@ export function createInquiryApiHandler(config) {
    * @param {Record<string, unknown>} payload
    */
   function validateInquiry(payload) {
-    const name = cleanText(payload.name, 40);
     const email = cleanText(payload.email, 120);
     const subject = cleanText(payload.subject, 80);
     const message = cleanMessage(payload.message, 2000);
@@ -303,13 +302,13 @@ export function createInquiryApiHandler(config) {
     const elapsedMs = Number.isFinite(openedAt) ? Date.now() - openedAt : 0;
 
     if (website) return { ok: false, code: 400, message: "잘못된 요청입니다." };
-    if (!name || !email || !subject || !message) {
-      return { ok: false, code: 400, message: "이름, 이메일, 제목, 내용을 모두 입력해 주세요." };
+    if (!email || !subject || !message) {
+      return { ok: false, code: 400, message: "이메일, 제목, 내용을 모두 입력해 주세요." };
     }
     if (subject.length < 2) return { ok: false, code: 400, message: "제목을 2자 이상 입력해 주세요." };
     if (message.length < 10) return { ok: false, code: 400, message: "내용을 10자 이상 입력해 주세요." };
     if (!looksLikeEmail(email)) return { ok: false, code: 400, message: "이메일 형식이 올바르지 않습니다." };
-    if (hasSuspiciousMarkup(name) || hasSuspiciousMarkup(email) || hasSuspiciousMarkup(subject) || hasSuspiciousMarkup(message)) {
+    if (hasSuspiciousMarkup(email) || hasSuspiciousMarkup(subject) || hasSuspiciousMarkup(message)) {
       return { ok: false, code: 400, message: "허용되지 않는 입력 형식이 포함되어 있습니다." };
     }
     if (!openedAt || elapsedMs < 1500 || elapsedMs > 60 * 60 * 1000) {
@@ -318,19 +317,17 @@ export function createInquiryApiHandler(config) {
     const urlCount = (message.match(/https?:\/\/|www\./gi) || []).length;
     if (urlCount > 3) return { ok: false, code: 400, message: "링크가 너무 많습니다." };
 
-    return { ok: true, data: { name, email, subject, message } };
+    return { ok: true, data: { email, subject, message } };
   }
 
   /**
-   * @param {{name: string; email: string; subject: string; message: string; ip: string; ua: string;}} input
+   * @param {{email: string; subject: string; message: string; ip: string; ua: string;}} input
    */
   async function sendInquiryMail(input) {
-    const safeName = input.name || "-";
     const safeEmail = input.email || "-";
     const body = [
       "[데구르르 문의]",
       "",
-      `이름: ${safeName}`,
       `이메일: ${safeEmail}`,
       `IP: ${input.ip}`,
       `UA: ${input.ua || "-"}`,
