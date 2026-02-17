@@ -72,9 +72,12 @@ export function AppShell() {
   const settingsConfirmDialogRef = useRef<HTMLDialogElement | null>(null);
   const inquiryDialogRef = useRef<HTMLDialogElement | null>(null);
   const resultDialogRef = useRef<HTMLDialogElement | null>(null);
+  const settingsListRef = useRef<HTMLDivElement | null>(null);
   const bgmControlRef = useRef<HTMLDivElement | null>(null);
   const countdownTimersRef = useRef<number[]>([]);
   const filePickerActiveRef = useRef(false);
+  const previousSettingsOpenRef = useRef<boolean>(!!ui.settingsOpen);
+  const previousSettingsBallCountRef = useRef<number>(ui.balls.length);
 
   const inquiryEmailRef = useRef<HTMLInputElement | null>(null);
   const inquirySubjectRef = useRef<HTMLInputElement | null>(null);
@@ -173,6 +176,29 @@ export function AppShell() {
   }, [ui.inquiryOpen]);
 
   useEffect(() => () => clearCountdownTimers(), []);
+
+  useEffect(() => {
+    const isOpen = !!ui.settingsOpen;
+    const wasOpen = previousSettingsOpenRef.current;
+    const previousCount = previousSettingsBallCountRef.current;
+    const currentCount = ui.balls.length;
+
+    if (isOpen && wasOpen && currentCount > previousCount) {
+      const list = settingsListRef.current;
+      if (list) {
+        window.requestAnimationFrame(() => {
+          try {
+            list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+          } catch {
+            list.scrollTop = list.scrollHeight;
+          }
+        });
+      }
+    }
+
+    previousSettingsOpenRef.current = isOpen;
+    previousSettingsBallCountRef.current = currentCount;
+  }, [ui.settingsOpen, ui.balls.length]);
 
   function focusInquiryField(field: RequiredInquiryField) {
     const map = {
@@ -367,7 +393,7 @@ export function AppShell() {
               </div>
             }
           >
-            <div className="twList" id="settings-list">
+            <div className="twList" id="settings-list" ref={settingsListRef}>
               {ui.balls.map((ball) => {
                 const fileInputId = `ball-file-${ball.id}`;
                 return (

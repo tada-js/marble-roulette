@@ -561,31 +561,37 @@ html, body {
 .panelCard .mini {
   background: rgba(255,255,255,0.035);
 }
+.participantSection__actions {
+  display: flex;
+  justify-content: flex-end;
+}
 .mobileFold__toggle,
 .mobileFold__toggleBtn {
   appearance: none;
-  border: 1px solid rgba(255,255,255,0.16);
-  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.20);
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
   color: rgba(241, 247, 255, 0.92);
-  border-radius: 10px;
+  border-radius: 11px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 10px;
+  height: 34px;
+  padding: 0 12px;
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast), box-shadow var(--motion-fast);
 }
 .mobileFold__toggle {
   width: 100%;
-  justify-content: flex-start;
+  justify-content: space-between;
   text-align: left;
 }
 .mobileFold__toggleBtn {
-  width: 32px;
-  min-width: 32px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
   padding: 0;
   justify-content: center;
 }
@@ -599,6 +605,11 @@ html, body {
   outline: none;
   box-shadow: 0 0 0 3px var(--ring);
 }
+.mobileFold__toggle[aria-expanded="true"],
+.mobileFold__toggleBtn[aria-expanded="true"] {
+  border-color: rgba(69,243,195,0.38);
+  background: linear-gradient(180deg, rgba(69,243,195,0.14), rgba(69,243,195,0.05));
+}
 .mobileFold__label {
   min-width: 0;
   font-weight: 900;
@@ -606,23 +617,35 @@ html, body {
 }
 .mobileFold__meta {
   margin-left: auto;
+  margin-right: 6px;
   font-size: 11px;
   color: rgba(228,239,255,0.72);
 }
 .mobileFold__caret {
-  margin-left: auto;
+  margin-left: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.08);
   color: rgba(228,239,255,0.86);
+  font-size: 10px;
+  line-height: 1;
   transform: rotate(0deg);
-  transition: transform var(--motion-fast);
+  transition: transform var(--motion-fast), border-color var(--motion-fast), background-color var(--motion-fast);
 }
 .mobileFold__toggleBtn .mobileFold__caret {
   margin-left: 0;
 }
 .mobileFold__meta + .mobileFold__caret {
-  margin-left: 8px;
+  margin-left: 0;
 }
 .mobileFold__caret.is-open {
   transform: rotate(180deg);
+  border-color: rgba(69,243,195,0.42);
+  background: rgba(69,243,195,0.16);
 }
 
 .board {
@@ -1232,6 +1255,9 @@ canvas#game {
   cursor: grab;
   padding: 0;
   flex: 0 0 auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .participantRow__dragHandle svg {
   width: 16px;
@@ -1341,9 +1367,12 @@ canvas#game {
 }
 .participantRow__qtyBtn {
   width: 32px;
+  min-width: 32px;
   height: 32px;
+  min-height: 32px;
+  max-height: 32px;
   padding: 0;
-  border-radius: 999px;
+  border-radius: 10px;
 }
 .participantRow__count {
   min-width: 0;
@@ -1911,15 +1940,25 @@ dialog.dialog--winner::backdrop {
     padding-left: 10px;
     padding-right: 10px;
   }
+  .panelCard--participants.is-mobileFold,
   .resultOption.is-mobileFold,
   .startCaption.is-mobileFold {
     padding: 8px;
     border-radius: 12px;
   }
+  .panelCard--participants.is-mobileFold .mobileFold__toggle,
   .resultOption.is-mobileFold .mobileFold__toggle,
   .startCaption.is-mobileFold .mobileFold__toggle {
     min-height: 34px;
     height: 34px;
+  }
+  .panelCard--participants.is-mobileFold .participantSection__actions {
+    margin: 8px 0 8px;
+  }
+  .panelCard--participants.is-mobileFold .participantSection__actions .btn {
+    min-height: 32px;
+    height: 32px;
+    padding: 0 10px;
   }
   .mini {
     border: none;
@@ -1988,14 +2027,25 @@ dialog.dialog--winner::backdrop {
     max-width: 150px;
   }
   .participantRow {
-    grid-template-columns: 26px 34px minmax(0, 1fr);
+    grid-template-columns: 26px 34px minmax(0, 1fr) auto;
+    padding: 8px 10px;
+    gap: 8px;
+    align-items: center;
   }
   .participantRow__qty {
-    grid-column: 1 / -1;
-    grid-template-columns: 34px 56px 34px;
+    grid-column: auto;
+    grid-template-columns: 32px 54px 32px;
     justify-content: flex-end;
-    justify-self: stretch;
+    justify-self: end;
     min-width: 0;
+  }
+  .participantRow__qtyBtn {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    border-radius: 10px;
   }
   .participantRow__dragHandle {
     width: 26px;
@@ -2007,8 +2057,8 @@ dialog.dialog--winner::backdrop {
     height: 14px;
   }
   .participantRow__count {
-    width: 56px;
-    height: 34px;
+    width: 54px;
+    height: 32px;
   }
   .twWinner { grid-template-columns: 1fr; }
   .twWinner__thumb { width: 100%; height: auto; aspect-ratio: 1 / 1; }
@@ -2215,6 +2265,21 @@ dialog.dialog--settings::backdrop {
 }
 .twModal__card.twModal__card--scrollable .twModal__footer {
   background: transparent;
+}
+
+/* Keep participant-settings modal footer position stable when list length changes (e.g. 4 -> 5). */
+.settingsModal.twModal__card--scrollable .twModal__body {
+  overflow: hidden;
+}
+.settingsModal.twModal__card--scrollable .twList {
+  --settings-list-height: clamp(420px, 56dvh, 640px);
+  height: var(--settings-list-height);
+  min-height: var(--settings-list-height);
+  max-height: var(--settings-list-height);
+  overflow: auto;
+  overflow-x: hidden;
+  align-content: start;
+  padding-right: 6px;
 }
 
 .twWinner {
@@ -2754,6 +2819,9 @@ dialog.dialog--settings::backdrop {
 
 @media (max-width: 860px) {
   .twList { grid-template-columns: 1fr; }
+  .settingsModal.twModal__card--scrollable .twList {
+    --settings-list-height: clamp(360px, 50dvh, 560px);
+  }
 }
 
 @media (max-width: 720px) {
@@ -2819,5 +2887,9 @@ dialog.dialog--settings::backdrop {
   .settingsModal .settingsTitle {
     flex-wrap: wrap;
     gap: 6px;
+  }
+  .settingsModal.twModal__card--scrollable .twList {
+    --settings-list-height: clamp(300px, 44dvh, 460px);
+    padding-right: 2px;
   }
 }

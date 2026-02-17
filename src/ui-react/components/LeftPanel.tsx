@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent, type TouchEvent } from "react";
 import { Button } from "./Button";
 import { AppIcon } from "./Icons";
 
@@ -72,6 +72,14 @@ export function LeftPanel(props: LeftPanelProps) {
   const showParticipants = !isMobileViewport || participantsFoldOpen;
   const showResultOption = !isMobileViewport || resultFoldOpen;
   const showStartCaption = !isMobileViewport || captionFoldOpen;
+  const participantTitle = `참가자 목록(${totalParticipants})`;
+  const participantFoldAriaLabel = showParticipants ? "참가자 목록 접기" : "참가자 목록 펼치기";
+  const participantFoldCaretClassName = ["mobileFold__caret", showParticipants ? "is-open" : ""]
+    .filter(Boolean)
+    .join(" ");
+  const participantCardClassName = ["panelCard", "panelCard--participants", isLocked ? "is-locked" : "", isMobileViewport ? "is-mobileFold" : ""]
+    .filter(Boolean)
+    .join(" ");
 
   function clearDragState() {
     setDraggingBallId(null);
@@ -114,6 +122,70 @@ export function LeftPanel(props: LeftPanelProps) {
 
   function handleDragEnd() {
     clearDragState();
+  }
+
+  function findBallIdFromPoint(clientX: number, clientY: number): string | null {
+    if (typeof document === "undefined") return null;
+    const pointedElement = document.elementFromPoint(clientX, clientY);
+    if (!pointedElement) return null;
+    const rowElement = pointedElement.closest("[data-ball-id]");
+    if (!(rowElement instanceof HTMLElement)) return null;
+    const targetBallId = rowElement.getAttribute("data-ball-id");
+    return targetBallId || null;
+  }
+
+  function handleTouchDragStart(ballId: string, event: TouchEvent<HTMLButtonElement>) {
+    if (isLocked) return;
+    setDraggingBallId(ballId);
+    setDropTargetBallId(ballId);
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+  }
+
+  function handleTouchDragMove(event: TouchEvent<HTMLButtonElement>) {
+    if (isLocked || !draggingBallId) return;
+    const movingTouch = event.touches[0];
+    if (!movingTouch) return;
+    const targetBallId = findBallIdFromPoint(movingTouch.clientX, movingTouch.clientY);
+    if (targetBallId && targetBallId !== draggingBallId && targetBallId !== dropTargetBallId) {
+      setDropTargetBallId(targetBallId);
+    }
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+  }
+
+  function handleTouchDragEnd(event: TouchEvent<HTMLButtonElement>) {
+    if (isLocked || !draggingBallId) {
+      clearDragState();
+      return;
+    }
+    const touchPoint = event.changedTouches[0];
+    const targetBallIdFromPoint = touchPoint ? findBallIdFromPoint(touchPoint.clientX, touchPoint.clientY) : null;
+    const sourceBallId = draggingBallId;
+    const targetBallId = targetBallIdFromPoint || dropTargetBallId;
+    if (targetBallId && targetBallId !== sourceBallId) {
+      onReorderBall(sourceBallId, targetBallId);
+    }
+    clearDragState();
+  }
+
+  function handleTouchDragCancel() {
+    clearDragState();
+  }
+
+  function renderDesktopParticipantHeader() {
+    return (
+      <div className="panelCard__header">
+        <div className="panelCard__title">{participantTitle}</div>
+        <div className="panelCard__headerActions">
+          <Button id="settings-btn" variant="ghost" size="sm" disabled={isLocked} onClick={onOpenSettings}>
+            참가자 설정
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   useEffect(() => {
@@ -164,29 +236,31 @@ export function LeftPanel(props: LeftPanelProps) {
         </div>
       </div>
 
-      <section className={`panelCard panelCard--participants ${isLocked ? "is-locked" : ""}`}>
-        <div className="panelCard__header">
-          <div className="panelCard__title">{`참가자 목록(${totalParticipants})`}</div>
-          <div className="panelCard__headerActions">
+      <section className={participantCardClassName}>
+        {isMobileViewport ? (
+          <button
+            type="button"
+            className="mobileFold__toggle"
+            aria-label={participantFoldAriaLabel}
+            aria-expanded={showParticipants}
+            aria-controls="participant-list-body"
+            onClick={() => setParticipantsFoldOpen((prev) => !prev)}
+          >
+            <span className="mobileFold__label">{participantTitle}</span>
+            <span className={participantFoldCaretClassName} aria-hidden="true">
+              ▾
+            </span>
+          </button>
+        ) : (
+          renderDesktopParticipantHeader()
+        )}
+        {isMobileViewport && showParticipants && (
+          <div className="participantSection__actions">
             <Button id="settings-btn" variant="ghost" size="sm" disabled={isLocked} onClick={onOpenSettings}>
               참가자 설정
             </Button>
-            {isMobileViewport && (
-              <button
-                type="button"
-                className="mobileFold__toggleBtn"
-                aria-label={showParticipants ? "참가자 목록 접기" : "참가자 목록 펼치기"}
-                aria-controls="participant-list-body"
-                aria-expanded={showParticipants}
-                onClick={() => setParticipantsFoldOpen((prev) => !prev)}
-              >
-                <span className={`mobileFold__caret ${showParticipants ? "is-open" : ""}`} aria-hidden="true">
-                  ▾
-                </span>
-              </button>
-            )}
           </div>
-        </div>
+        )}
         {showParticipants && (
           <div id="participant-list-body" className={`participantListWrap ${isLocked ? "is-locked" : ""}`}>
             <div className="participantList" id="balls" aria-hidden={isLocked ? "true" : undefined}>
@@ -202,6 +276,7 @@ export function LeftPanel(props: LeftPanelProps) {
                 return (
                   <div
                     key={ball.id}
+                    data-ball-id={ball.id}
                     className={`${rowClassName} tooltip`}
                     data-tip={ball.name}
                     title={ball.name}
@@ -219,6 +294,10 @@ export function LeftPanel(props: LeftPanelProps) {
                       disabled={isLocked}
                       onDragStart={(event) => handleDragStart(ball.id, event)}
                       onDragEnd={handleDragEnd}
+                      onTouchStart={(event) => handleTouchDragStart(ball.id, event)}
+                      onTouchMove={handleTouchDragMove}
+                      onTouchEnd={handleTouchDragEnd}
+                      onTouchCancel={handleTouchDragCancel}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <circle cx="8" cy="6.5" r="1.4" />

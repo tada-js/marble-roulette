@@ -1,108 +1,100 @@
 # 데구르르 (Degururu)
 
-동물 공(기본: 강아지/토끼/햄스터)이 핀볼 보드의 핀(peg)을 튕기며 아래 슬롯으로 떨어지는 "사다리" 스타일의 데구르르 게임입니다.
+데구르르는 공이 떨어지며 당첨자를 정하는 핀볼 사다리 게임입니다. 커피 내기, 점심 메뉴 정하기부터 모임과 이벤트까지 가볍고 재미있게 활용해 보세요!
 
-## Features
+- 플레이: [https://degururu.vercel.app/](https://degururu.vercel.app/)
 
-- 기본 공: 강아지 / 토끼 / 햄스터
-- UI/엔진/렌더 레이어: TypeScript 기반
-- 공별 이름/이미지 커스터마이즈(업로드, 로컬 저장)
-- `게임 시작`으로 선택된 공 전체 동시 투하
-- `일시정지/이어하기`, 시점 고정/자유 시점 전환
-- 당첨자: 가장 늦게 바닥(슬롯)에 도착한 공
-- `window.render_game_to_text()` / `window.advanceTime(ms)` 제공(자동화 테스트 용이)
+## 게임 한눈에 보기
 
-## Local Dev
+![데구르르 플레이 이미지](public/assets/play-image.png)
+
+## How To Play
+
+1. 참가자 목록에서 인원/개수를 조정합니다.
+2. `참가자 설정`에서 이름, 이미지, 순서를 편집합니다.
+3. `게임 시작`으로 전체 공을 동시에 투하합니다.
+4. 완료 후 `결과 보기`에서 선택 결과를 확인/복사합니다.
+
+## 핵심 UX 포인트
+
+- 핀볼 보드 기반의 물리 시뮬레이션
+- 피니시 구간 클로즈업/템포 연출
+- 결과 발표 모달(스핀 연출 + 요약 목록)
+- 모바일/데스크톱 반응형 UI
+
+## Quick Start
+
+요구사항:
+- Node.js 20+
+
+실행:
 
 ```bash
-# repo root에서 실행
-cd degururu
 npm ci
 npm run dev
 ```
 
-브라우저에서 `http://localhost:5173` 접속.
-`npm run dev`는 Vite + React/TypeScript로 실행됩니다.
+브라우저: `http://localhost:5173`
 
-문의 메일 전송(서버 API) 설정:
+## 문의 API 환경변수 (선택)
+
+문의하기 기능을 사용할 경우 설정합니다.
 
 ```bash
 cp .env.example .env.local
-# .env.local에 실제 값을 입력
 ```
 
-필수 환경변수:
-- `INQUIRY_TO_EMAIL`: 문의 수신 주소
-- `RESEND_API_KEY`: Resend API 키
-- `INQUIRY_FROM_EMAIL`: 발신 주소(검증 도메인 권장)
+필수 값:
+- `INQUIRY_TO_EMAIL`
+- `RESEND_API_KEY`
+- `INQUIRY_FROM_EMAIL`
+- `INQUIRY_ALLOWED_ORIGINS`
 
-## Tests
-
-```bash
-npm test
-npm run lint
-npm run typecheck
-npm run build:vite
-```
-
-## Deploy (Vercel)
-
-### 1) 로컬 검증
+## 품질 검증
 
 ```bash
-npm ci
 npm run typecheck
 npm run lint
 npm test --silent
 npm run build:vite
 ```
 
-### 2) Vercel 환경변수 설정
-
-Vercel Project Settings > Environment Variables에 아래 값을 등록하세요.
-
-- `INQUIRY_TO_EMAIL`
-- `RESEND_API_KEY`
-- `INQUIRY_FROM_EMAIL`
-- `INQUIRY_ALLOWED_ORIGINS` (예: `https://your-domain.com,https://www.your-domain.com`)
-
-### 3) Preview 배포
+## 배포 (Vercel)
 
 ```bash
 vercel deploy -y
-```
-
-### 4) Production 배포
-
-```bash
 vercel deploy --prod -y
 ```
 
-### 5) 점검 포인트
+배포 전 체크:
+- `/api/inquiry` 응답 코드(성공/에러) 확인
+- 클라이언트 네트워크 탭에 API 키/수신 이메일 노출 없음 확인
+- 운영 도메인만 `INQUIRY_ALLOWED_ORIGINS`에 등록
 
-- `/api/inquiry`가 200/4xx/5xx를 의도대로 반환하는지 확인
-- 브라우저 Network 탭에서 API 키/수신 이메일이 클라이언트로 내려오지 않는지 확인
-- `INQUIRY_ALLOWED_ORIGINS`에 운영 도메인만 등록했는지 확인
+## 프로젝트 구조
 
-## Storybook
-
-```bash
-npm run storybook
+```text
+src/game        # 물리/시뮬레이션/렌더 로직
+src/app         # 앱 상태 결합, 액션, selector
+src/ui-react    # React UI 레이어
+src/ui          # 비 React 유틸/컨트롤러
+api             # 서버리스 API
+docs            # 디자인 시스템/문서
 ```
 
-- 기본 주소: `http://localhost:6006`
-- 디자인 시스템 스토리:
-  - `Design System/Button`
-  - `Design System/ModalCard`
-  - `Design System/Tokens`
+## 문서
 
-## Design System
+- 디자인 시스템: `docs/design-system.md`
+- 개인정보 처리방침: `public/privacy-policy.html`
 
-- 가이드: `docs/design-system.md`
-- 공통 UI 컴포넌트: `src/ui-react/components`
+## 기여 가이드
 
-## GitHub Flow
+- PR 제목 형식: `type: summary` (예: `feat: 결과 모달 공개 플로우 개선`)
+- 허용 타입: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `ci`, `ui`
+- PR 본문 섹션 순서:
+  - `## 변경 사항`
+  - `## 검증`
 
-- `main`: 배포/릴리즈 기준
-- 작업은 `feature/<topic>` 브랜치 생성
-- PR로 `main`에 머지 (CodeRabbit 리뷰 활용)
+## 라이선스
+
+별도 라이선스 정책이 필요하면 프로젝트 정책에 맞춰 추가하세요.
