@@ -337,6 +337,11 @@ export function bootstrapGameApp() {
   let quickFinishJobId = 0;
   let lastFrameUiRefreshAt = 0;
   let lastFrameUiSignature = "";
+  const finishedAtSecondsByMarbleId = new Map<string, number>();
+  let runStartedAtMs = 0;
+  let prevFrameAtMs = 0;
+  let prevFrameSimT = 0;
+  let seenFinishedCount = 0;
 
   const QUICK_FINISH_STEPS_PER_FRAME = 560;
   const QUICK_FINISH_MAX_STEPS = 84000;
@@ -408,6 +413,67 @@ export function bootstrapGameApp() {
       1
     );
     return { active: true, remaining, progress };
+  }
+
+  function resetArrivalTimingTrackers() {
+    finishedAtSecondsByMarbleId.clear();
+    runStartedAtMs = 0;
+    prevFrameAtMs = 0;
+    prevFrameSimT = 0;
+    seenFinishedCount = 0;
+  }
+
+  function beginArrivalTimingTrackers(startedAtMs = performance.now()) {
+    finishedAtSecondsByMarbleId.clear();
+    runStartedAtMs = startedAtMs;
+    prevFrameAtMs = startedAtMs;
+    prevFrameSimT = Number(state.t) || 0;
+    seenFinishedCount = 0;
+  }
+
+  function captureFinishedArrivalTimes(nowMs: number) {
+    if (runStartedAtMs <= 0) return;
+    if (!state.finished.length) {
+      prevFrameAtMs = nowMs;
+      prevFrameSimT = Number(state.t) || 0;
+      return;
+    }
+    if (seenFinishedCount >= state.finished.length) {
+      prevFrameAtMs = nowMs;
+      prevFrameSimT = Number(state.t) || 0;
+      return;
+    }
+
+    const simNow = Number(state.t) || 0;
+    const simDelta = Math.max(0, simNow - prevFrameSimT);
+    const wallDeltaMs = Math.max(0, nowMs - prevFrameAtMs);
+    const fallbackArrivalSeconds = Math.max(0, (nowMs - runStartedAtMs) / 1000);
+
+    for (let index = seenFinishedCount; index < state.finished.length; index++) {
+      const entry = state.finished[index];
+      let arrivalSeconds = fallbackArrivalSeconds;
+
+      if (simDelta > 1e-6 && wallDeltaMs > 0) {
+        const simSinceArrival = Math.max(0, simNow - entry.t);
+        const blend = clamp(simSinceArrival / simDelta, 0, 1);
+        const estimatedArrivalMs = nowMs - wallDeltaMs * blend;
+        arrivalSeconds = Math.max(0, (estimatedArrivalMs - runStartedAtMs) / 1000);
+      }
+
+      finishedAtSecondsByMarbleId.set(entry.marbleId, arrivalSeconds);
+    }
+
+    seenFinishedCount = state.finished.length;
+    prevFrameAtMs = nowMs;
+    prevFrameSimT = simNow;
+  }
+
+  function getArrivalTimeSeconds(entry: FinishedMarble): number {
+    const realSeconds = finishedAtSecondsByMarbleId.get(entry.marbleId);
+    if (typeof realSeconds === "number" && Number.isFinite(realSeconds)) {
+      return Math.max(0, realSeconds);
+    }
+    return Math.max(0, Number(entry.t) || 0);
   }
 
   function getFinishTempoMultiplier(baseMultiplier: number): number {
@@ -516,7 +582,7 @@ export function bootstrapGameApp() {
         ballId: entry.ballId,
         name: payload?.name || entry.ballId || "알 수 없는 공",
         img: payload?.img || "",
-        finishedAt: entry.t,
+        finishedAt: getArrivalTimeSeconds(entry),
         slot: entry.slot,
         label: entry.label,
       };
@@ -557,6 +623,7 @@ export function bootstrapGameApp() {
 
   function prepareAndOpenResultReveal() {
     if (!state.totalToDrop || !state.finished.length) return;
+    captureFinishedArrivalTimes(performance.now());
     const selected = selectLastFinishers(state.finished, uiState.winnerCount, state.totalToDrop);
     const items = mapFinishedToResultItems(selected);
     openResultPresentationByCount(items);
@@ -596,11 +663,12 @@ export function bootstrapGameApp() {
   function refreshUiFromFrame() {
     syncFinishTriggerRemaining();
     syncLoopSpeed();
+    const now = performance.now();
+    captureFinishedArrivalTimes(now);
     const inRun = state.mode === "playing" && !state.winner;
     const remainingToFinish = inRun ? Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length) : -1;
     const winnerT = state.winner ? Number(state.winner.t.toFixed(4)) : -1;
     const signature = `${state.mode}|${state.paused ? 1 : 0}|${remainingToFinish}|${winnerT}|${uiState.quickFinishPending ? 1 : 0}`;
-    const now = performance.now();
 
     if (signature === lastFrameUiSignature && now - lastFrameUiRefreshAt < FRAME_UI_THROTTLE_MS) return;
     lastFrameUiSignature = signature;
@@ -685,6 +753,7 @@ export function bootstrapGameApp() {
       refreshUi();
     },
     onReset: () => {
+      resetArrivalTimingTrackers();
       cancelQuickFinishTask();
       uiState.winnerCountWasClamped = false;
       resetResultHistory();
@@ -706,6 +775,9 @@ export function bootstrapGameApp() {
       resetResultHistory();
       uiState.winnerCountWasClamped = false;
       sessionController.handleStartClick();
+      if (state.mode === "playing" && state.released) {
+        beginArrivalTimingTrackers();
+      }
       syncLoopSpeed(true);
       refreshUi();
     },
