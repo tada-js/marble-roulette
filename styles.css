@@ -1434,6 +1434,9 @@ canvas#game {
   max-width: 100vw;
   overflow-x: hidden;
 }
+.dialog[open] {
+  z-index: 1000;
+}
 .dialog__card {
   width: min(740px, calc(100vw - 24px));
   border-radius: var(--radius);
@@ -2874,7 +2877,10 @@ dialog.dialog--settings::backdrop {
 }
 
 @media (max-width: 720px) {
-  #settings-dialog {
+  #settings-dialog:not([open]) {
+    display: none;
+  }
+  #settings-dialog[open] {
     width: 100vw;
     max-width: 100vw;
     height: 100dvh;
@@ -2889,13 +2895,13 @@ dialog.dialog--settings::backdrop {
     overflow: hidden;
     display: grid;
   }
-  #settings-dialog .twModal {
+  #settings-dialog[open] .twModal {
     width: 100%;
     height: 100%;
     min-height: 0;
     display: grid;
   }
-  #settings-dialog .settingsModal.twModal__card.twModal__card--scrollable {
+  #settings-dialog[open] .settingsModal.twModal__card.twModal__card--scrollable {
     width: 100%;
     height: 100%;
     max-height: 100%;
