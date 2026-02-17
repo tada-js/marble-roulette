@@ -1,9 +1,10 @@
 const TRACKS = Object.freeze({
   bgm_1: ["/assets/bgm_1.mp3", "/public/assets/bgm_1.mp3"],
   bgm_2: ["/assets/bgm_2.mp3", "/public/assets/bgm_2.mp3"],
+  bgm_3: ["/assets/bgm_3.mp3", "/public/assets/bgm_3.mp3"],
 });
 const DEFAULT_TRACK = "bgm_1";
-const BGM_VOLUME = 0.3;
+const BGM_VOLUME = 0.25;
 
 /**
  * @param {number} value
@@ -247,7 +248,7 @@ export function createAudioController(opts = {}) {
   }
 
   function restoreFromStorage() {
-    let nextOn = true;
+    let nextOn = false;
 
     try {
       const savedTrack = localStorage.getItem(trackStorageKey);
@@ -261,7 +262,7 @@ export function createAudioController(opts = {}) {
       if (v === "0") nextOn = false;
       else if (v === "1") nextOn = true;
     } catch {
-      nextOn = true;
+      nextOn = false;
     }
 
     setOn(nextOn, { autoplay: false });

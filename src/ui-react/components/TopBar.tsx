@@ -25,7 +25,7 @@ type TopBarProps = {
   onToggleSpeed: () => void;
   onToggleBgm: () => void;
   onToggleBgmMenu: () => void;
-  onSelectBgmTrack: (track: "bgm_1" | "bgm_2") => void;
+  onSelectBgmTrack: (track: "bgm_1" | "bgm_2" | "bgm_3") => void;
   onInquiry: () => void;
 };
 
@@ -191,6 +191,16 @@ export function TopBar(props: TopBarProps) {
               onClick={() => onSelectBgmTrack("bgm_2")}
             >
               BGM 2
+            </button>
+            <button
+              type="button"
+              className="bgmMenu__item"
+              data-bgm-track="bgm_3"
+              role="menuitemradio"
+              aria-checked={bgmTrack === "bgm_3" ? "true" : "false"}
+              onClick={() => onSelectBgmTrack("bgm_3")}
+            >
+              BGM 3
             </button>
           </div>
         </div>

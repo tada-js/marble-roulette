@@ -141,7 +141,7 @@ const DEFAULT_SNAPSHOT: UiSnapshot = Object.freeze({
   settingsOpen: false,
   settingsDirty: false,
   settingsConfirmOpen: false,
-  bgmOn: true,
+  bgmOn: false,
   bgmTrack: "bgm_1",
   inquiryOpen: false,
   inquirySubmitting: false,

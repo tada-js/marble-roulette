@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent, type TouchEvent } from "react";
-import { Button } from "./Button";
+import { Button, IconButton } from "./Button";
 import { AppIcon } from "./Icons";
 
 const START_CAPTION_MAX = 28;
@@ -62,6 +62,7 @@ export function LeftPanel(props: LeftPanelProps) {
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(readMobileViewport);
   const [draggingBallId, setDraggingBallId] = useState<string | null>(null);
   const [dropTargetBallId, setDropTargetBallId] = useState<string | null>(null);
+  const [mobileHudFoldOpen, setMobileHudFoldOpen] = useState<boolean>(true);
   const [participantsFoldOpen, setParticipantsFoldOpen] = useState<boolean>(true);
   const [resultFoldOpen, setResultFoldOpen] = useState<boolean>(() => !readMobileViewport());
   const [captionFoldOpen, setCaptionFoldOpen] = useState<boolean>(() => !readMobileViewport());
@@ -69,15 +70,34 @@ export function LeftPanel(props: LeftPanelProps) {
   const canIncreaseResultCount = winnerCount < winnerCountMax;
   const totalParticipants = balls.reduce((sum, ball) => sum + Math.max(0, Math.floor(Number(ball.count) || 0)), 0);
   const startCaptionLength = String(startCaption || "").length;
+  const showMobileHudSections = !isMobileViewport || mobileHudFoldOpen;
   const showParticipants = !isMobileViewport || participantsFoldOpen;
   const showResultOption = !isMobileViewport || resultFoldOpen;
   const showStartCaption = !isMobileViewport || captionFoldOpen;
+  const mobileHudFoldAriaLabel = showMobileHudSections ? "메뉴 닫기" : "메뉴 열기";
+  const collapsedHudClassName = showMobileHudSections ? "" : "is-hud-collapsed";
   const participantTitle = `참가자 목록(${totalParticipants})`;
   const participantFoldAriaLabel = showParticipants ? "참가자 목록 접기" : "참가자 목록 펼치기";
   const participantFoldCaretClassName = ["mobileFold__caret", showParticipants ? "is-open" : ""]
     .filter(Boolean)
     .join(" ");
   const participantCardClassName = ["panelCard", "panelCard--participants", isLocked ? "is-locked" : "", isMobileViewport ? "is-mobileFold" : ""]
+    .filter(Boolean)
+    .join(" ");
+  const participantSectionClassName = [participantCardClassName, collapsedHudClassName].filter(Boolean).join(" ");
+  const resultOptionClassName = [
+    "resultOption",
+    "resultOption--inline",
+    isLocked ? "is-disabled" : "",
+    isMobileViewport ? "is-mobileFold" : "",
+    collapsedHudClassName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const startCaptionClassName = ["startCaption", isLocked ? "is-disabled" : "", isMobileViewport ? "is-mobileFold" : "", collapsedHudClassName]
+    .filter(Boolean)
+    .join(" ");
+  const hudClassName = ["hud", isMobileViewport && !showMobileHudSections ? "is-mobile-collapsed" : ""]
     .filter(Boolean)
     .join(" ");
 
@@ -207,8 +227,14 @@ export function LeftPanel(props: LeftPanelProps) {
     return () => mediaQuery.removeListener(onChange);
   }, []);
 
+  useEffect(() => {
+    if (!isMobileViewport && !mobileHudFoldOpen) {
+      setMobileHudFoldOpen(true);
+    }
+  }, [isMobileViewport, mobileHudFoldOpen]);
+
   return (
-    <div className="hud">
+    <div className={hudClassName}>
       <div className="mini">
         <div className="mini__row">
           <div className="mini__title" id="minimap-title">
@@ -236,7 +262,22 @@ export function LeftPanel(props: LeftPanelProps) {
         </div>
       </div>
 
-      <section className={participantCardClassName}>
+      {isMobileViewport && (
+        <div className="hud__mobileMenuRow">
+          <IconButton
+            id="mobile-hud-menu-btn"
+            className={`hud__mobileMenuBtn ${showMobileHudSections ? "is-open" : ""}`}
+            ariaLabel={mobileHudFoldAriaLabel}
+            ariaExpanded={showMobileHudSections}
+            title={mobileHudFoldAriaLabel}
+            onClick={() => setMobileHudFoldOpen((prev) => !prev)}
+          >
+            <AppIcon name="menu" />
+          </IconButton>
+        </div>
+      )}
+
+      <section className={participantSectionClassName}>
         {isMobileViewport ? (
           <button
             type="button"
@@ -357,7 +398,7 @@ export function LeftPanel(props: LeftPanelProps) {
         )}
       </section>
 
-      <div className={`resultOption resultOption--inline ${isLocked ? "is-disabled" : ""} ${isMobileViewport ? "is-mobileFold" : ""}`}>
+      <div className={resultOptionClassName}>
         {isMobileViewport && (
           <button
             type="button"
@@ -432,7 +473,7 @@ export function LeftPanel(props: LeftPanelProps) {
         )}
       </div>
 
-      <div className={`startCaption ${isLocked ? "is-disabled" : ""} ${isMobileViewport ? "is-mobileFold" : ""}`}>
+      <div className={startCaptionClassName}>
         {isMobileViewport && (
           <button
             type="button"

@@ -72,12 +72,23 @@ export function LockIcon(props: BaseIconProps) {
   );
 }
 
+export function MenuIcon(props: BaseIconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M4.5 7h15" />
+      <path d="M4.5 12h15" />
+      <path d="M4.5 17h15" />
+    </BaseIcon>
+  );
+}
+
 export const ICON_REGISTRY = {
   "volume-on": { label: "Volume On", Component: VolumeOnIcon },
   "volume-off": { label: "Volume Off", Component: VolumeOffIcon },
   "music-track": { label: "Music Track", Component: MusicTrackIcon },
   mail: { label: "Mail", Component: MailIcon },
   lock: { label: "Lock", Component: LockIcon },
+  menu: { label: "Menu", Component: MenuIcon },
 } as const;
 
 export type AppIconName = keyof typeof ICON_REGISTRY;
