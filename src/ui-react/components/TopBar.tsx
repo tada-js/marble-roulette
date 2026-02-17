@@ -12,6 +12,8 @@ type TopBarProps = {
   quickFinishVisible: boolean;
   quickFinishDisabled: boolean;
   quickFinishLabel: string;
+  stopRunVisible: boolean;
+  stopRunDisabled: boolean;
   speedMultiplier: number;
   bgmOn: boolean;
   bgmTrack: string;
@@ -19,6 +21,7 @@ type TopBarProps = {
   bgmControlRef: RefObject<HTMLDivElement | null>;
   onStart: () => void;
   onQuickFinish: () => void;
+  onStopRun: () => void;
   onToggleSpeed: () => void;
   onToggleBgm: () => void;
   onToggleBgmMenu: () => void;
@@ -36,6 +39,8 @@ export function TopBar(props: TopBarProps) {
     quickFinishVisible,
     quickFinishDisabled,
     quickFinishLabel,
+    stopRunVisible,
+    stopRunDisabled,
     speedMultiplier,
     bgmOn,
     bgmTrack,
@@ -43,6 +48,7 @@ export function TopBar(props: TopBarProps) {
     bgmControlRef,
     onStart,
     onQuickFinish,
+    onStopRun,
     onToggleSpeed,
     onToggleBgm,
     onToggleBgmMenu,
@@ -97,6 +103,19 @@ export function TopBar(props: TopBarProps) {
             onClick={onQuickFinish}
           >
             {quickFinishLabel}
+          </Button>
+        ) : null}
+        {stopRunVisible ? (
+          <Button
+            id="stop-run-btn"
+            variant="danger"
+            size="sm"
+            className="topbar__stop"
+            disabled={stopRunDisabled}
+            title="진행을 중지하고 초기화"
+            onClick={onStopRun}
+          >
+            중지
           </Button>
         ) : null}
       </div>

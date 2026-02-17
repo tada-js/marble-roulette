@@ -79,6 +79,7 @@ export type UiActions = {
   handleStartClick: () => void;
   prepareRestartForCountdown: () => void;
   completeRunNow: () => boolean;
+  stopRunNow: () => boolean;
   togglePause: () => void;
   setWinnerCount: (nextValue: number) => void;
   openSettings: () => void;
@@ -161,6 +162,7 @@ let actions: UiActions = {
   handleStartClick: NOOP_VOID,
   prepareRestartForCountdown: NOOP_VOID,
   completeRunNow: NOOP_FALSE,
+  stopRunNow: NOOP_FALSE,
   togglePause: NOOP_VOID,
   setWinnerCount: NOOP_VOID,
   openSettings: NOOP_VOID,

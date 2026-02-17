@@ -277,6 +277,23 @@ html, body {
   border-color: rgba(255,176,0,0.5);
   background: rgba(255,176,0,0.14);
 }
+.topbar__stop.btn {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border-color: rgba(255,88,112,0.38);
+  background: rgba(255,88,112,0.09);
+  color: rgba(255,228,235,0.96);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08px;
+  box-shadow: none;
+}
+.topbar__stop.btn:hover:not(:disabled) {
+  border-color: rgba(255,88,112,0.54);
+  background: rgba(255,88,112,0.16);
+}
 .topbar__start.btn:hover:not(:disabled) {
   border-color: rgba(69,243,195,0.42);
   background: rgba(255,255,255,0.10);
@@ -1600,6 +1617,12 @@ dialog.dialog--winner::backdrop {
     font-size: 13px;
   }
   .topbar__quickFinish.btn {
+    min-height: 34px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+  .topbar__stop.btn {
     min-height: 34px;
     height: 34px;
     padding: 0 10px;

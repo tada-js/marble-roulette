@@ -575,6 +575,14 @@ export function bootstrapGameApp() {
       refreshUi();
     },
     completeRunNow: () => completeRunNow(),
+    stopRunNow: () => {
+      const inRun = state.mode === "playing" && !state.winner;
+      if (!inRun) return false;
+      cancelQuickFinishTask();
+      sessionController.prepareRestartForCountdown();
+      refreshUi();
+      return true;
+    },
     togglePause: () => {
       sessionController.togglePause();
       refreshUi();
