@@ -234,17 +234,11 @@ export function LeftPanel(props: LeftPanelProps) {
                       <img alt={ball.name} src={ball.imageDataUrl} />
                     </div>
 
-                    <div className="participantRow__meta">
-                      <div className="participantRow__name">
-                        <span className="participantRow__nameText">{ball.name}</span>
-                      </div>
-                    </div>
-
                     <div className="participantRow__qty">
                       <Button
                         variant="ghost"
                         className="participantRow__qtyBtn"
-                        disabled={ball.locked}
+                        disabled={ball.locked || ball.count <= 1}
                         onClick={() => onAdjustBallCount(ball.id, -1)}
                       >
                         -
@@ -253,7 +247,7 @@ export function LeftPanel(props: LeftPanelProps) {
                         className="participantRow__count"
                         type="number"
                         inputMode="numeric"
-                        min="0"
+                        min="1"
                         max="99"
                         step="1"
                         value={String(ball.count)}

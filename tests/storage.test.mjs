@@ -47,7 +47,7 @@ test("save/load ball counts clamps values to supported range", () => {
   saveBallCounts({ dog: -10, cat: 150 });
   const counts = loadBallCounts(catalog);
 
-  assert.equal(counts.dog, 0);
+  assert.equal(counts.dog, 1);
   assert.equal(counts.cat, 99);
 });
 
