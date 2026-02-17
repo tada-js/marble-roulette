@@ -20,10 +20,19 @@ jobs:
       - name: Enable PR auto-merge (squash)
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          set -u
+          set -o pipefail
+
+          PR_ID="$(gh pr view "${PR_NUMBER}" --repo "${GH_REPO}" --json id -q '.id')"
+          if [ -z "${PR_ID}" ]; then
+            echo "::warning::PR node id 조회 실패로 auto-merge 설정을 건너뜁니다."
+            exit 0
+          fi
+
           set +e
-          PR_ID="$(gh pr view "${PR_NUMBER}" --json id -q '.id' 2>/dev/null)"
           OUTPUT="$(gh api graphql \
             -f query='mutation($pullRequestId: ID!) { enablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId, mergeMethod: SQUASH }) { clientMutationId } }' \
             -f pullRequestId="${PR_ID}" 2>&1)"
@@ -35,7 +44,7 @@ jobs:
             exit 0
           fi
 
-          if echo "${OUTPUT}" | grep -Eqi "AUTO_MERGE_ENABLED|Pull request is already merged|Pull request is closed|already enabled"; then
+          if echo "${OUTPUT}" | grep -Eqi "AUTO_MERGE_ENABLED|Pull request is already merged|Pull request is closed|already enabled|Auto merge is not enabled for this repository"; then
             exit 0
           fi
 
