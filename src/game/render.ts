@@ -1,4 +1,9 @@
 import type { BallCatalogItem, Board, FixedEntity, GameState, SpawnBounds } from "./engine.ts";
+import {
+  classifyAvatarGlyph,
+  getAvatarImageOffset,
+  type AvatarGlyphKind,
+} from "./avatar-glyph.ts";
 
 export type RendererViewState = {
   scale: number;
@@ -103,6 +108,7 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
   const trailsByMarble = new Map<string, TrailPoint[]>();
   const motionByMarble = new Map<string, MotionCache>();
   const catalogById = new Map<string, BallCatalogItem>();
+  const avatarKindById = new Map<string, AvatarGlyphKind>();
   const labelWidthByKey = new Map<string, number>();
   const impactRings: RingFx[] = [];
   const impactParticles: ParticleFx[] = [];
@@ -124,8 +130,10 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     if (lastCatalogRef === ballsCatalog) return;
     lastCatalogRef = ballsCatalog;
     catalogById.clear();
+    avatarKindById.clear();
     for (const entry of ballsCatalog) {
       catalogById.set(entry.id, entry);
+      avatarKindById.set(entry.id, classifyAvatarGlyph(String(entry.name || "")).kind);
     }
   }
 
@@ -884,8 +892,10 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
       ctx.clip();
+      const avatarKind = avatarKindById.get(m.ballId) ?? "unknown";
+      const avatarOffset = getAvatarImageOffset(avatarKind, r);
       if (img && img.complete) {
-        ctx.drawImage(img, -r, -r, r * 2, r * 2);
+        ctx.drawImage(img, -r - avatarOffset.x, -r + avatarOffset.y, r * 2, r * 2);
       } else {
         ctx.fillStyle = "rgba(0,0,0,0.18)";
         ctx.fillRect(-r, -r, r * 2, r * 2);

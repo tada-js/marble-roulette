@@ -11,7 +11,12 @@ import {
   getTotalSelectedCount,
   setBallCount,
 } from "../game/engine.ts";
-import { BALL_LIBRARY, DEFAULT_BALLS } from "../game/assets.ts";
+import {
+  BALL_LIBRARY,
+  DEFAULT_BALLS,
+  buildSystemBallImageDataUrl,
+  isSystemBallAvatarUrl,
+} from "../game/assets.ts";
 import { makeRenderer } from "../game/render.ts";
 import { createGameBoard } from "../game/board-config.ts";
 import { createLoopController } from "../game/loop-controller.ts";
@@ -652,9 +657,23 @@ export function bootstrapGameApp() {
       if (idx < 0) return false;
       const target = draft[idx];
       const nextName = sanitizeBallName(name, target.name);
-      if (nextName === target.name) return false;
+      const shouldSyncAvatar = isSystemBallAvatarUrl(target.imageDataUrl);
+      const nextImageDataUrl = shouldSyncAvatar
+        ? buildSystemBallImageDataUrl({
+            ballId: target.id,
+            name: nextName,
+            fallbackImageDataUrl: target.imageDataUrl,
+            tint: target.tint,
+          })
+        : target.imageDataUrl;
+
+      if (nextName === target.name && nextImageDataUrl === target.imageDataUrl) return false;
       const next = draft.slice();
-      next[idx] = { ...target, name: nextName };
+      next[idx] = {
+        ...target,
+        name: nextName,
+        imageDataUrl: nextImageDataUrl,
+      };
       uiState.settingsDraft = next;
       recalcSettingsDirty();
       refreshUi();

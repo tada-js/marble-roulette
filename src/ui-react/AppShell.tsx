@@ -73,6 +73,7 @@ export function AppShell() {
   const resultDialogRef = useRef<HTMLDialogElement | null>(null);
   const bgmControlRef = useRef<HTMLDivElement | null>(null);
   const countdownTimersRef = useRef<number[]>([]);
+  const filePickerActiveRef = useRef(false);
 
   const inquiryNameRef = useRef<HTMLInputElement | null>(null);
   const inquiryEmailRef = useRef<HTMLInputElement | null>(null);
@@ -283,6 +284,11 @@ export function AppShell() {
         className="dialog dialog--settings"
         ref={settingsDialogRef}
         onCancel={(event) => {
+          if (filePickerActiveRef.current) {
+            event.preventDefault();
+            return;
+          }
+          if (event.target !== event.currentTarget) return;
           event.preventDefault();
           runAction("closeSettings");
         }}
@@ -391,7 +397,17 @@ export function AppShell() {
                         type="file"
                         accept="image/*"
                         disabled={catalogLocked}
+                        onClick={() => {
+                          filePickerActiveRef.current = true;
+                          const clear = () => {
+                            window.setTimeout(() => {
+                              filePickerActiveRef.current = false;
+                            }, 0);
+                          };
+                          window.addEventListener("focus", clear, { once: true });
+                        }}
                         onChange={async (event) => {
+                          filePickerActiveRef.current = false;
                           const file = event.currentTarget.files?.[0];
                           setFileNames((prev) => ({
                             ...prev,
@@ -459,7 +475,7 @@ export function AppShell() {
           <ModalCard
             size="md"
             title="문의하기"
-            description="문의 내용을 안전하게 전송합니다."
+            description="문의 내용은 안전하게 보관되어 전송됩니다."
             onClose={() => runAction("closeInquiry")}
             footer={
               <Button id="inquiry-send" variant="primary" type="submit" disabled={ui.inquirySubmitting}>
@@ -469,7 +485,9 @@ export function AppShell() {
           >
             <div className="inquiryForm">
               <div className="field">
-                <label htmlFor="inq-name">이름</label>
+                <label htmlFor="inq-name">
+                  <span className="field__required">*</span>이름
+                </label>
                 <input
                   id="inq-name"
                   name="name"
@@ -484,7 +502,9 @@ export function AppShell() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="inq-email">이메일</label>
+                <label htmlFor="inq-email">
+                  <span className="field__required">*</span>이메일
+                </label>
                 <input
                   id="inq-email"
                   name="email"
@@ -499,7 +519,9 @@ export function AppShell() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="inq-subject">제목</label>
+                <label htmlFor="inq-subject">
+                  <span className="field__required">*</span>제목
+                </label>
                 <input
                   id="inq-subject"
                   name="subject"
@@ -513,7 +535,9 @@ export function AppShell() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="inq-message">내용</label>
+                <label htmlFor="inq-message">
+                  <span className="field__required">*</span>내용
+                </label>
                 <textarea
                   id="inq-message"
                   name="message"

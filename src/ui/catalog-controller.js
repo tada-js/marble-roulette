@@ -1,4 +1,8 @@
-import { BALL_LIBRARY } from "../game/assets.ts";
+import {
+  BALL_LIBRARY,
+  buildSystemBallImageDataUrl,
+  isSystemBallAvatarUrl,
+} from "../game/assets.ts";
 import {
   loadBallsCatalog,
   loadBallCounts,
@@ -35,17 +39,22 @@ export function createCatalogController(opts) {
       if (!lib) return b;
 
       const url = String(b?.imageDataUrl || "");
-      const isSvg = url.startsWith("data:image/svg+xml");
-      const isOurSvg =
-        isSvg &&
-        (url.includes("radialGradient%20id%3D%22v%22") ||
-          url.includes('radialGradient id="v"') ||
-          url.includes("paint-order%3A%20stroke") ||
-          url.includes("paint-order: stroke"));
+      const nextName = sanitizeName(b?.name, lib.name);
+      const normalizedAutoAvatar = buildSystemBallImageDataUrl({
+        ballId: lib.id,
+        name: nextName,
+        fallbackImageDataUrl: url,
+        tint: typeof b?.tint === "string" ? b.tint : lib.tint,
+      });
 
-      if (isOurSvg && url !== lib.imageDataUrl) {
+      if (isSystemBallAvatarUrl(url) && url !== normalizedAutoAvatar) {
         changed = true;
-        return { ...b, imageDataUrl: lib.imageDataUrl, tint: lib.tint };
+        return {
+          ...b,
+          name: nextName,
+          imageDataUrl: normalizedAutoAvatar,
+          tint: typeof b?.tint === "string" ? b.tint : lib.tint,
+        };
       }
       return b;
     });
@@ -123,9 +132,18 @@ export function createCatalogController(opts) {
     if (idx < 0) return false;
     const target = catalog[idx];
     const nextName = sanitizeName(name, target.name);
-    if (nextName === target.name) return false;
+    const shouldSyncAvatar = isSystemBallAvatarUrl(target.imageDataUrl);
+    const nextImageDataUrl = shouldSyncAvatar
+      ? buildSystemBallImageDataUrl({
+          ballId: target.id,
+          name: nextName,
+          fallbackImageDataUrl: target.imageDataUrl,
+          tint: target.tint,
+        })
+      : target.imageDataUrl;
+    if (nextName === target.name && nextImageDataUrl === target.imageDataUrl) return false;
     const next = catalog.slice();
-    next[idx] = { ...target, name: nextName };
+    next[idx] = { ...target, name: nextName, imageDataUrl: nextImageDataUrl };
     saveBallsCatalog(next);
     setCatalog(next);
     return true;

@@ -190,7 +190,7 @@ export function LeftPanel(props: LeftPanelProps) {
           </div>
         </div>
         <div className="resultOption__meta">최대 {winnerCountMax}개</div>
-        <div className="resultOption__helper">가장 늦게 도착한 순서대로 선택 결과를 공개합니다.</div>
+        <div className="resultOption__helper">가장 늦게 도착한 순서대로 결과를 공개합니다.</div>
         {winnerCountWasClamped ? (
           <div className="resultOption__hint">입력값이 최대치를 넘어 자동으로 맞춰졌습니다.</div>
         ) : null}
