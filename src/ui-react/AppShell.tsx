@@ -79,6 +79,7 @@ export function AppShell() {
   const inquiryEmailRef = useRef<HTMLInputElement | null>(null);
   const inquirySubjectRef = useRef<HTMLInputElement | null>(null);
   const inquiryMessageRef = useRef<HTMLTextAreaElement | null>(null);
+  const catalogLocked = !!ui.balls.find((ball) => ball.locked);
 
   function runAction<K extends keyof UiActions>(
     key: K,
@@ -196,7 +197,6 @@ export function AppShell() {
   }
 
   const inquiryMessageLength = Math.min(2000, String(ui.inquiryForm?.message || "").length);
-  const catalogLocked = !!ui.balls.find((ball) => ball.locked);
   const canAddCatalogBall = ui.balls.length < CATALOG_MAX && !catalogLocked;
   const canRemoveCatalogBall = ui.balls.length > 1 && !catalogLocked;
   const canApplySettings = !!ui.settingsDirty && !catalogLocked;
@@ -279,6 +279,9 @@ export function AppShell() {
             onSetStartCaption={(value) => runAction("setStartCaption", value)}
             onAdjustBallCount={(ballId, delta) => runAction("adjustBallCount", ballId, delta)}
             onSetBallCount={(ballId, nextValue) => runAction("setBallCount", ballId, nextValue)}
+            onReorderBall={(sourceBallId, targetBallId) =>
+              runAction("reorderCatalogBall", sourceBallId, targetBallId)
+            }
           />
           <GameCanvasStage
             isDev={isDev}
@@ -329,7 +332,7 @@ export function AppShell() {
                     disabled={!canAddCatalogBall}
                     onClick={() => runAction("addCatalogBall")}
                   >
-                    공 추가
+                    참가자 추가
                   </Button>
                   <Button
                     id="restore-defaults"
@@ -338,20 +341,27 @@ export function AppShell() {
                     disabled={catalogLocked}
                     onClick={() => runAction("restoreDefaultCatalog")}
                   >
-                    기본값 복원
+                    설정 초기화
                   </Button>
                 </div>
                 <div className="settingsFooter__right">
                   <Button
                     id="apply-settings"
                     variant="primary"
+                    width="lg"
                     type="button"
                     disabled={!canApplySettings}
                     onClick={() => runAction("applySettings")}
                   >
                     적용
                   </Button>
-                  <Button id="close-settings" variant="ghost" type="button" onClick={() => runAction("closeSettings")}>
+                  <Button
+                    id="close-settings"
+                    variant="ghost"
+                    width="lg"
+                    type="button"
+                    onClick={() => runAction("closeSettings")}
+                  >
                     {settingsCloseLabel}
                   </Button>
                 </div>
@@ -363,6 +373,18 @@ export function AppShell() {
                 const fileInputId = `ball-file-${ball.id}`;
                 return (
                   <div className="twItem" key={ball.id}>
+                    <IconButton
+                      className="twItem__removeIcon"
+                      ariaLabel={`${ball.name} 삭제`}
+                      title="삭제"
+                      disabled={!canRemoveCatalogBall}
+                      onClick={() => runAction("removeCatalogBall", ball.id)}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 7L17 17" />
+                        <path d="M17 7L7 17" />
+                      </svg>
+                    </IconButton>
                     <div className="twItem__topRow">
                       <div className="twItem__primaryRow">
                         <div className="twItem__thumb">
@@ -380,18 +402,6 @@ export function AppShell() {
                           />
                         </div>
                       </div>
-                      <IconButton
-                        className="twItem__removeIcon"
-                        ariaLabel={`${ball.name} 삭제`}
-                        title="삭제"
-                        disabled={!canRemoveCatalogBall}
-                        onClick={() => runAction("removeCatalogBall", ball.id)}
-                      >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M7 7L17 17" />
-                          <path d="M17 7L7 17" />
-                        </svg>
-                      </IconButton>
                     </div>
                     <div className="twItem__secondaryId">ID: {ball.id}</div>
                     <div className="field twItem__field">
@@ -478,6 +488,10 @@ export function AppShell() {
         ref={inquiryDialogRef}
         onCancel={(event) => {
           event.preventDefault();
+          runAction("closeInquiry");
+        }}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
           runAction("closeInquiry");
         }}
       >

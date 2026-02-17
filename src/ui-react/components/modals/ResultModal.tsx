@@ -39,6 +39,18 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
+function formatArrivalTime(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "00:00:00";
+  const totalMs = Math.max(0, Math.round(value * 1000));
+  const minutes = Math.floor(totalMs / 60000);
+  const seconds = Math.floor((totalMs % 60000) / 1000);
+  const centiseconds = Math.floor((totalMs % 1000) / 10);
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  const cs = String(centiseconds).padStart(2, "0");
+  return `${mm}:${ss}:${cs}`;
+}
+
 function getResultViewKind(params: {
   isSpinning: boolean;
   spinPlan: { items: Array<{ key: string; ballId: string; name: string; img: string }>; startY: number; stopY: number; overshootY: number } | null;
@@ -268,6 +280,7 @@ export function ResultModal({
             <img src={finalWinner.img || "data:,"} alt={finalWinner.name} />
           </div>
           <div className="resultSingleCard__name">{finalWinner.name}</div>
+          <div className="resultSingleCard__time">{formatArrivalTime(finalWinner.finishedAt)}</div>
         </div>
       );
     }
@@ -279,6 +292,7 @@ export function ResultModal({
             <li key={`${item.rank}-${item.ballId}-${item.finishedAt}`} className={`resultSummaryList__item ${item.rank === 1 ? "is-top" : ""}`}>
               <span className="resultSummaryList__rank">#{item.rank}</span>
               <span className="resultSummaryList__name">{item.name}</span>
+              <span className="resultSummaryList__time">{formatArrivalTime(item.finishedAt)}</span>
             </li>
           ))}
         </ol>
@@ -293,7 +307,7 @@ export function ResultModal({
       return (
         <div className="resultModal__actions">
           <Button variant="ghost" type="button" buttonRef={skipButtonRef} onClick={onSkip}>
-            모두 보기
+            바로 보기
           </Button>
         </div>
       );

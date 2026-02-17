@@ -1,3 +1,4 @@
+import { useEffect, useState, type DragEvent } from "react";
 import { Button } from "./Button";
 import { AppIcon } from "./Icons";
 
@@ -28,6 +29,7 @@ type LeftPanelProps = {
   onSetStartCaption: (value: string) => void;
   onAdjustBallCount: (ballId: string, delta: number) => void;
   onSetBallCount: (ballId: string, value: number) => void;
+  onReorderBall: (sourceBallId: string, targetBallId: string) => void;
 };
 
 export function LeftPanel(props: LeftPanelProps) {
@@ -48,12 +50,64 @@ export function LeftPanel(props: LeftPanelProps) {
     onSetStartCaption,
     onAdjustBallCount,
     onSetBallCount,
+    onReorderBall,
   } = props;
   const isLocked = !!balls.find((ball) => ball.locked);
+  const [draggingBallId, setDraggingBallId] = useState<string | null>(null);
+  const [dropTargetBallId, setDropTargetBallId] = useState<string | null>(null);
   const canDecreaseResultCount = winnerCount > 1;
   const canIncreaseResultCount = winnerCount < winnerCountMax;
   const totalParticipants = balls.reduce((sum, ball) => sum + Math.max(0, Math.floor(Number(ball.count) || 0)), 0);
   const startCaptionLength = String(startCaption || "").length;
+
+  function clearDragState() {
+    setDraggingBallId(null);
+    setDropTargetBallId(null);
+  }
+
+  function handleDragStart(ballId: string, event: DragEvent<HTMLButtonElement>) {
+    if (isLocked) {
+      event.preventDefault();
+      return;
+    }
+    setDraggingBallId(ballId);
+    setDropTargetBallId(ballId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", ballId);
+  }
+
+  function handleDragOver(ballId: string, event: DragEvent<HTMLDivElement>) {
+    if (isLocked) return;
+    const sourceBallId = draggingBallId || event.dataTransfer.getData("text/plain");
+    if (!sourceBallId || sourceBallId === ballId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (dropTargetBallId !== ballId) {
+      setDropTargetBallId(ballId);
+    }
+  }
+
+  function handleDrop(ballId: string, event: DragEvent<HTMLDivElement>) {
+    if (isLocked) return;
+    event.preventDefault();
+    const sourceBallId = draggingBallId || event.dataTransfer.getData("text/plain");
+    if (!sourceBallId || sourceBallId === ballId) {
+      clearDragState();
+      return;
+    }
+    onReorderBall(sourceBallId, ballId);
+    clearDragState();
+  }
+
+  function handleDragEnd() {
+    clearDragState();
+  }
+
+  useEffect(() => {
+    if (!isLocked) return;
+    setDraggingBallId(null);
+    setDropTargetBallId(null);
+  }, [isLocked]);
 
   return (
     <div className="hud">
@@ -93,50 +147,89 @@ export function LeftPanel(props: LeftPanelProps) {
         </div>
         <div className={`participantListWrap ${isLocked ? "is-locked" : ""}`}>
           <div className="participantList" id="balls" aria-hidden={isLocked ? "true" : undefined}>
-            {balls.map((ball) => (
-              <div key={ball.id} className="participantRow" role="group">
-                <div className="participantRow__thumb">
-                  <img alt={ball.name} src={ball.imageDataUrl} />
-                </div>
+            {balls.map((ball) => {
+              const rowClassName = [
+                "participantRow",
+                draggingBallId === ball.id ? "is-dragging" : "",
+                dropTargetBallId === ball.id && draggingBallId !== ball.id ? "is-drop-target" : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
 
-                <div className="participantRow__meta">
-                  <div className="participantRow__name tooltip" data-tip={ball.name} aria-label={ball.name}>
-                    <span className="participantRow__nameText">{ball.name}</span>
+              return (
+                <div
+                  key={ball.id}
+                  className={`${rowClassName} tooltip`}
+                  data-tip={ball.name}
+                  title={ball.name}
+                  aria-label={ball.name}
+                  role="group"
+                  onDragOver={(event) => handleDragOver(ball.id, event)}
+                  onDrop={(event) => handleDrop(ball.id, event)}
+                >
+                  <button
+                    type="button"
+                    className="participantRow__dragHandle"
+                    aria-label={`${ball.name} 순서 이동`}
+                    title={isLocked ? "진행 중에는 순서를 변경할 수 없어요." : "드래그해서 순서를 변경하세요."}
+                    draggable={!isLocked}
+                    disabled={isLocked}
+                    onDragStart={(event) => handleDragStart(ball.id, event)}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="8" cy="6.5" r="1.4" />
+                      <circle cx="8" cy="12" r="1.4" />
+                      <circle cx="8" cy="17.5" r="1.4" />
+                      <circle cx="16" cy="6.5" r="1.4" />
+                      <circle cx="16" cy="12" r="1.4" />
+                      <circle cx="16" cy="17.5" r="1.4" />
+                    </svg>
+                  </button>
+
+                  <div className="participantRow__thumb">
+                    <img alt={ball.name} src={ball.imageDataUrl} />
+                  </div>
+
+                  <div className="participantRow__meta">
+                    <div className="participantRow__name">
+                      <span className="participantRow__nameText">{ball.name}</span>
+                    </div>
+                  </div>
+
+                  <div className="participantRow__qty">
+                    <Button
+                      variant="ghost"
+                      className="participantRow__qtyBtn"
+                      disabled={ball.locked}
+                      onClick={() => onAdjustBallCount(ball.id, -1)}
+                    >
+                      -
+                    </Button>
+                    <input
+                      className="participantRow__count"
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="99"
+                      step="1"
+                      value={String(ball.count)}
+                      aria-label={`${ball.name} 개수`}
+                      disabled={ball.locked}
+                      onChange={(event) => onSetBallCount(ball.id, Number(event.currentTarget.value))}
+                    />
+                    <Button
+                      variant="ghost"
+                      className="participantRow__qtyBtn"
+                      disabled={ball.locked}
+                      onClick={() => onAdjustBallCount(ball.id, 1)}
+                    >
+                      +
+                    </Button>
                   </div>
                 </div>
-
-                <div className="participantRow__qty">
-                  <Button
-                    variant="ghost"
-                    className="participantRow__qtyBtn"
-                    disabled={ball.locked}
-                    onClick={() => onAdjustBallCount(ball.id, -1)}
-                  >
-                    -
-                  </Button>
-                  <input
-                    className="participantRow__count"
-                    type="number"
-                    inputMode="numeric"
-                    min="0"
-                    max="99"
-                    step="1"
-                    value={String(ball.count)}
-                    aria-label={`${ball.name} 개수`}
-                    disabled={ball.locked}
-                    onChange={(event) => onSetBallCount(ball.id, Number(event.currentTarget.value))}
-                  />
-                  <Button
-                    variant="ghost"
-                    className="participantRow__qtyBtn"
-                    disabled={ball.locked}
-                    onClick={() => onAdjustBallCount(ball.id, 1)}
-                  >
-                    +
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           {isLocked ? (
             <div className="participantList__lockOverlay" role="status" aria-live="polite">

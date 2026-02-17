@@ -181,6 +181,24 @@ function catalogFingerprint(input: CatalogDraftItem[]): string {
   );
 }
 
+function reorderCatalogDraft(
+  draft: CatalogDraftItem[],
+  sourceBallId: string,
+  targetBallId: string
+): CatalogDraftItem[] | null {
+  if (!sourceBallId || !targetBallId || sourceBallId === targetBallId) return null;
+
+  const sourceIndex = draft.findIndex((ball) => ball.id === sourceBallId);
+  const targetIndex = draft.findIndex((ball) => ball.id === targetBallId);
+  if (sourceIndex < 0 || targetIndex < 0) return null;
+
+  const next = draft.slice();
+  const [moved] = next.splice(sourceIndex, 1);
+  if (!moved) return null;
+  next.splice(targetIndex, 0, moved);
+  return next;
+}
+
 function toResultCopyText(items: ResultUiItem[]): string {
   if (!items.length) return "";
   return items.map((item) => `${item.rank}. ${item.name}`).join("\n");
@@ -680,6 +698,26 @@ export function bootstrapGameApp() {
       if (next.length === draft.length) return false;
       uiState.settingsDraft = next;
       recalcSettingsDirty();
+      refreshUi();
+      return true;
+    },
+    reorderCatalogBall: (sourceBallId, targetBallId) => {
+      if (isBallControlLocked()) return false;
+      if (uiState.settingsOpen) {
+        const draft = ensureSettingsDraft();
+        const next = reorderCatalogDraft(draft, sourceBallId, targetBallId);
+        if (!next) return false;
+        uiState.settingsDraft = next;
+        recalcSettingsDirty();
+        refreshUi();
+        return true;
+      }
+
+      const live = getLiveCatalogView();
+      const next = reorderCatalogDraft(live, sourceBallId, targetBallId);
+      if (!next) return false;
+      const changed = catalogController.replaceCatalog(next);
+      if (!changed) return false;
       refreshUi();
       return true;
     },
