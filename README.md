@@ -45,6 +45,45 @@ npm run typecheck
 npm run build:vite
 ```
 
+## Deploy (Vercel)
+
+### 1) 로컬 검증
+
+```bash
+npm ci
+npm run typecheck
+npm run lint
+npm test --silent
+npm run build:vite
+```
+
+### 2) Vercel 환경변수 설정
+
+Vercel Project Settings > Environment Variables에 아래 값을 등록하세요.
+
+- `INQUIRY_TO_EMAIL`
+- `RESEND_API_KEY`
+- `INQUIRY_FROM_EMAIL`
+- `INQUIRY_ALLOWED_ORIGINS` (예: `https://your-domain.com,https://www.your-domain.com`)
+
+### 3) Preview 배포
+
+```bash
+vercel deploy -y
+```
+
+### 4) Production 배포
+
+```bash
+vercel deploy --prod -y
+```
+
+### 5) 점검 포인트
+
+- `/api/inquiry`가 200/4xx/5xx를 의도대로 반환하는지 확인
+- 브라우저 Network 탭에서 API 키/수신 이메일이 클라이언트로 내려오지 않는지 확인
+- `INQUIRY_ALLOWED_ORIGINS`에 운영 도메인만 등록했는지 확인
+
 ## Storybook
 
 ```bash
