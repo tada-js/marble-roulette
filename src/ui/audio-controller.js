@@ -6,6 +6,15 @@ const DEFAULT_TRACK = "bgm_1";
 const BGM_VOLUME = 0.3;
 
 /**
+ * @param {number} value
+ * @param {number} min
+ * @param {number} max
+ */
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+/**
  * Create BGM controller (MP3 tracks).
  *
  * @param {{
@@ -26,12 +35,22 @@ export function createAudioController(opts = {}) {
     on: false,
     track: DEFAULT_TRACK,
     audio: null,
+    duckLevel: 1,
     _armed: false,
     _resumeHandler: null,
   };
 
   function emitState() {
     onStateChange({ on: bgm.on, track: bgm.track });
+  }
+
+  function getEffectiveVolume() {
+    return clamp(BGM_VOLUME * bgm.duckLevel, 0, 1);
+  }
+
+  function applyVolume() {
+    if (!bgm.audio) return;
+    bgm.audio.volume = getEffectiveVolume();
   }
 
   /**
@@ -70,7 +89,7 @@ export function createAudioController(opts = {}) {
     const audio = new Audio(sources[0]);
     audio.preload = "auto";
     audio.loop = true;
-    audio.volume = BGM_VOLUME;
+    audio.volume = getEffectiveVolume();
 
     const meta = {
       trackId,
@@ -136,7 +155,7 @@ export function createAudioController(opts = {}) {
     ensureAudioForTrack();
     if (!bgm.audio) return;
     bgm.audio.loop = true;
-    bgm.audio.volume = BGM_VOLUME;
+    applyVolume();
     if (bgm.audio.readyState === 0) bgm.audio.load();
     try {
       await bgm.audio.play();
@@ -216,6 +235,17 @@ export function createAudioController(opts = {}) {
     setOn(!bgm.on, opts);
   }
 
+  /**
+   * @param {number} level 0.05 ~ 1.0
+   */
+  function setDuckLevel(level = 1) {
+    const parsed = Number(level);
+    const next = Number.isFinite(parsed) ? clamp(parsed, 0.05, 1) : 1;
+    if (next === bgm.duckLevel) return;
+    bgm.duckLevel = next;
+    applyVolume();
+  }
+
   function restoreFromStorage() {
     let nextOn = true;
 
@@ -243,6 +273,7 @@ export function createAudioController(opts = {}) {
   return {
     isOn: () => bgm.on,
     getTrack: () => bgm.track,
+    setDuckLevel,
     setOn,
     toggle,
     setTrack,

@@ -287,7 +287,6 @@ export function AppShell() {
             isDev={isDev}
             countdownValue={countdownValue}
             onSkipCountdown={skipCountdown}
-            lastFewRemaining={ui.lastFewRemaining}
           />
         </main>
       </div>

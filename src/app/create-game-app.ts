@@ -22,6 +22,7 @@ import { createGameBoard } from "../game/board-config.ts";
 import { createLoopController } from "../game/loop-controller.ts";
 import { createSessionController } from "../game/session-controller.ts";
 import { mountDebugHooks } from "../game/debug-hooks.ts";
+import { computeFinishTriggerRemaining } from "../game/finish-tension.ts";
 import { createCatalogController } from "../ui/catalog-controller.js";
 import { mountViewControls } from "../ui/view-controls.js";
 import { createAudioController } from "../ui/audio-controller.js";
@@ -98,6 +99,12 @@ type CatalogDraftItem = {
   tint: string;
 };
 
+type FinishTensionSnapshot = {
+  active: boolean;
+  remaining: number;
+  progress: number;
+};
+
 const STATUS_LABEL_BY_TONE: Record<StatusTone, string> = {
   ready: "준비됨",
   running: "진행 중",
@@ -107,6 +114,24 @@ const STATUS_LABEL_BY_TONE: Record<StatusTone, string> = {
 
 // At 3x caption font, ~28 chars keeps 2-line readability on 900px world width.
 const START_CAPTION_MAX = 28;
+const FINISH_TENSION_TRIGGER_Y_FRAC = 0.82;
+const FINISH_TENSION_BASE_SLOWDOWN = 0.72;
+const FINISH_TENSION_SLOWDOWN_BY_REMAINING = {
+  1: 0.5,
+  2: 0.54,
+  3: 0.6,
+} as const;
+const FINISH_TENSION_CAP_BY_REMAINING = {
+  1: 0.56,
+  2: 0.62,
+  3: 0.68,
+} as const;
+const LOOP_SPEED_BLEND_RATIO = 0.3;
+const LOOP_SPEED_EPSILON = 0.002;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
 function deriveStatusTone(state: {
   mode?: string;
@@ -307,6 +332,7 @@ export function bootstrapGameApp() {
 
   let refreshUi: () => void = () => {};
   let applyLoopSpeed = (_speedMultiplier: number): void => {};
+  let appliedLoopSpeed = uiState.speedMultiplier;
   let quickFinishRafId = 0;
   let quickFinishJobId = 0;
   let lastFrameUiRefreshAt = 0;
@@ -334,8 +360,77 @@ export function bootstrapGameApp() {
     return Math.max(1, getTotalSelectedCount(state));
   }
 
+  function getFinishParticipantCount() {
+    if (state.totalToDrop > 0) return Math.max(1, Number(state.totalToDrop) || 1);
+    return Math.max(1, getTotalSelectedCount(state));
+  }
+
+  function syncFinishTriggerRemaining() {
+    const participantCount = getFinishParticipantCount();
+    const winnerCount = clampResultCount(uiState.winnerCount, Math.max(1, participantCount));
+    state.finishTriggerRemaining = computeFinishTriggerRemaining(participantCount, winnerCount);
+  }
+
   function isBallControlLocked() {
     return state.mode === "playing" && !state.winner;
+  }
+
+  function getFinishTensionSnapshot(): FinishTensionSnapshot {
+    const inRun = state.mode === "playing" && !state.winner && !!state.released;
+    if (!inRun) {
+      return { active: false, remaining: 0, progress: 0 };
+    }
+
+    const remaining = Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length);
+    const triggerRemaining = Math.max(1, Number(state.finishTriggerRemaining) || 3);
+    if (remaining <= 0 || remaining > triggerRemaining) {
+      return { active: false, remaining, progress: 0 };
+    }
+
+    let leaderY = Number.NEGATIVE_INFINITY;
+    for (const marble of state.marbles) {
+      if (marble.done) continue;
+      if (marble.y > leaderY) leaderY = marble.y;
+    }
+
+    if (!Number.isFinite(leaderY)) {
+      return { active: false, remaining, progress: 0 };
+    }
+
+    const triggerY = state.board.worldH * FINISH_TENSION_TRIGGER_Y_FRAC;
+    if (leaderY <= triggerY) {
+      return { active: false, remaining, progress: 0 };
+    }
+
+    const progress = clamp(
+      (leaderY - triggerY) / Math.max(1, state.board.worldH - triggerY),
+      0,
+      1
+    );
+    return { active: true, remaining, progress };
+  }
+
+  function getFinishTempoMultiplier(baseMultiplier: number): number {
+    const snapshot = getFinishTensionSnapshot();
+    if (!snapshot.active) return baseMultiplier;
+
+    const remainingKey = snapshot.remaining <= 1 ? 1 : snapshot.remaining === 2 ? 2 : 3;
+    const minSlowdown = FINISH_TENSION_SLOWDOWN_BY_REMAINING[remainingKey];
+    const slowdown =
+      FINISH_TENSION_BASE_SLOWDOWN -
+      (FINISH_TENSION_BASE_SLOWDOWN - minSlowdown) * snapshot.progress;
+    const cappedByState = FINISH_TENSION_CAP_BY_REMAINING[remainingKey];
+    return clamp(Math.min(baseMultiplier * slowdown, cappedByState), 0.5, 3);
+  }
+
+  function syncLoopSpeed(force = false) {
+    const targetSpeed = getFinishTempoMultiplier(uiState.speedMultiplier);
+    const nextSpeed = force
+      ? targetSpeed
+      : appliedLoopSpeed + (targetSpeed - appliedLoopSpeed) * LOOP_SPEED_BLEND_RATIO;
+    if (!force && Math.abs(nextSpeed - appliedLoopSpeed) < LOOP_SPEED_EPSILON) return;
+    appliedLoopSpeed = nextSpeed;
+    applyLoopSpeed(appliedLoopSpeed);
   }
 
   function cancelQuickFinishTask() {
@@ -499,6 +594,8 @@ export function bootstrapGameApp() {
   }
 
   function refreshUiFromFrame() {
+    syncFinishTriggerRemaining();
+    syncLoopSpeed();
     const inRun = state.mode === "playing" && !state.winner;
     const remainingToFinish = inRun ? Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length) : -1;
     const winnerT = state.winner ? Number(state.winner.t.toFixed(4)) : -1;
@@ -512,6 +609,7 @@ export function bootstrapGameApp() {
   }
 
   refreshUi = () => {
+    syncFinishTriggerRemaining();
     const total = getTotalSelectedCount(state);
     const inRun = state.mode === "playing" && !state.winner;
     const remainingToFinish = inRun ? Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length) : 0;
@@ -565,7 +663,7 @@ export function bootstrapGameApp() {
         name: ball.name,
         imageDataUrl: ball.imageDataUrl,
         count: Number.isFinite(state.counts?.[ball.id])
-          ? Math.max(0, Math.min(99, Number(state.counts[ball.id]) || 0))
+          ? Math.max(1, Math.min(99, Number(state.counts[ball.id]) || 1))
           : 1,
         locked: isBallControlLocked(),
       })),
@@ -590,11 +688,13 @@ export function bootstrapGameApp() {
       cancelQuickFinishTask();
       uiState.winnerCountWasClamped = false;
       resetResultHistory();
+      syncLoopSpeed(true);
       refreshUi();
     },
     onUpdateControls: refreshUiFromFrame,
     onShowWinner: () => {
       prepareAndOpenResultReveal();
+      syncLoopSpeed(true);
       refreshUi();
     },
   });
@@ -606,11 +706,13 @@ export function bootstrapGameApp() {
       resetResultHistory();
       uiState.winnerCountWasClamped = false;
       sessionController.handleStartClick();
+      syncLoopSpeed(true);
       refreshUi();
     },
     prepareRestartForCountdown: () => {
       cancelQuickFinishTask();
       sessionController.prepareRestartForCountdown();
+      syncLoopSpeed(true);
       refreshUi();
     },
     completeRunNow: () => completeRunNow(),
@@ -619,6 +721,7 @@ export function bootstrapGameApp() {
       if (!inRun) return false;
       cancelQuickFinishTask();
       sessionController.prepareRestartForCountdown();
+      syncLoopSpeed(true);
       refreshUi();
       return true;
     },
@@ -817,6 +920,7 @@ export function bootstrapGameApp() {
       resetResultHistory();
       uiState.winnerCountWasClamped = false;
       sessionController.handleStartClick();
+      syncLoopSpeed(true);
       refreshUi();
     },
     openInquiry: () => {
@@ -905,7 +1009,7 @@ export function bootstrapGameApp() {
     toggleSpeedMode: () => {
       const next = uiState.speedMultiplier >= 2 ? 1 : 2;
       uiState.speedMultiplier = next;
-      applyLoopSpeed(next);
+      syncLoopSpeed(true);
       refreshUi();
     },
     setBallCount: (ballId, nextValue) => {
@@ -942,6 +1046,7 @@ export function bootstrapGameApp() {
   applyLoopSpeed = (speedMultiplier) => {
     loopController.setSpeedMultiplier(speedMultiplier);
   };
+  syncLoopSpeed(true);
 
   mountDebugHooks({
     state,
@@ -981,6 +1086,7 @@ export function bootstrapGameApp() {
     refreshUi,
     dispose: () => {
       cancelQuickFinishTask();
+      syncLoopSpeed(true);
     },
   };
 }

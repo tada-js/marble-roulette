@@ -47,7 +47,7 @@ export function loadBallCounts(ballsCatalog) {
     if (!parsed || typeof parsed !== "object") return counts;
     for (const b of ballsCatalog) {
       const v = parsed[b.id];
-      if (typeof v === "number" && Number.isFinite(v)) counts[b.id] = Math.max(0, Math.min(99, v | 0));
+      if (typeof v === "number" && Number.isFinite(v)) counts[b.id] = Math.max(1, Math.min(99, v | 0));
     }
     return counts;
   } catch {

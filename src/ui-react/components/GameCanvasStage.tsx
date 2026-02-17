@@ -4,10 +4,9 @@ type GameCanvasStageProps = {
   isDev: boolean;
   countdownValue: number | null;
   onSkipCountdown: () => void;
-  lastFewRemaining: number;
 };
 
-export function GameCanvasStage({ isDev, countdownValue, onSkipCountdown, lastFewRemaining }: GameCanvasStageProps) {
+export function GameCanvasStage({ isDev, countdownValue, onSkipCountdown }: GameCanvasStageProps) {
   return (
     <div className="board">
       <canvas id="game" width="900" height="1350"></canvas>
@@ -19,11 +18,6 @@ export function GameCanvasStage({ isDev, countdownValue, onSkipCountdown, lastFe
           <button type="button" className="boardCountdown__skip" onClick={onSkipCountdown}>
             건너뛰기
           </button>
-        </div>
-      ) : null}
-      {lastFewRemaining > 0 ? (
-        <div className="boardHint boardHint--lastFew" aria-live="polite">
-          마지막 후보! {lastFewRemaining}개 남음
         </div>
       ) : null}
       {isDev ? (

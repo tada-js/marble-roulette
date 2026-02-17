@@ -1,4 +1,5 @@
 import type { BallCatalogItem, Board, FixedEntity, GameState, SpawnBounds } from "./engine.ts";
+import { resolveFinishTriggerRemaining } from "./finish-tension.ts";
 import {
   classifyAvatarGlyph,
   getAvatarImageOffset,
@@ -95,6 +96,24 @@ type RenderQualityProfile = {
   gridAlphaBase: number;
 };
 
+type FinishCinematicFrame = {
+  active: boolean;
+  leaderY: number;
+  leaderProgress: number;
+  remaining: number;
+  zoom: number;
+  pulse: number;
+  shakeYOffset: number;
+};
+
+type FinishCinematicState = {
+  active: boolean;
+  enteredAtMs: number;
+  impactAtMs: number;
+  settleUntilMs: number;
+  exitHoldUntilMs: number;
+};
+
 const RENDER_QUALITY_PROFILES: Record<RenderQualityLevel, RenderQualityProfile> = {
   high: {
     level: "high",
@@ -143,6 +162,13 @@ const IMPACT_RING_CAP_BY_QUALITY: Record<RenderQualityLevel, number> = {
   low: 20,
 };
 
+const FINISH_CINEMA_TRIGGER_Y_FRAC = 0.82;
+const FINISH_CINEMA_ZOOM_IN_MS = 760;
+const FINISH_CINEMA_ZOOM_MIN = 1.15;
+const FINISH_CINEMA_ZOOM_MAX = 1.2;
+const FINISH_CINEMA_SETTLE_MS = 130;
+const FINISH_CINEMA_EXIT_HOLD_MS = 320;
+
 function pickRenderQualityProfile(cssW: number, cssH: number): RenderQualityProfile {
   const area = Math.max(1, cssW * cssH);
   if (area >= 2_100_000) return RENDER_QUALITY_PROFILES.low;
@@ -172,6 +198,7 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
   let renderCssW = canvas.clientWidth || canvas.parentElement?.clientWidth || board.worldW;
   let renderCssH = canvas.clientHeight || canvas.parentElement?.clientHeight || board.worldH;
   let renderPixelRatio = 1;
+  let baseScale = 1;
   let renderQuality = pickRenderQualityProfile(renderCssW, renderCssH);
   const hashStr = (s: string): number => {
     // Small deterministic hash for stable per-entity color offsets.
@@ -209,6 +236,13 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
   const impactRings: RingFx[] = [];
   const impactParticles: ParticleFx[] = [];
   const slotRipples: RingFx[] = [];
+  const finishCinematic: FinishCinematicState = {
+    active: false,
+    enteredAtMs: 0,
+    impactAtMs: 0,
+    settleUntilMs: 0,
+    exitHoldUntilMs: 0,
+  };
   let seenFinishedCount = 0;
   let lastCatalogRef: BallCatalogItem[] | null = null;
   let startCaption = "";
@@ -221,6 +255,11 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     impactRings.length = 0;
     impactParticles.length = 0;
     slotRipples.length = 0;
+    finishCinematic.active = false;
+    finishCinematic.enteredAtMs = 0;
+    finishCinematic.impactAtMs = 0;
+    finishCinematic.settleUntilMs = 0;
+    finishCinematic.exitHoldUntilMs = 0;
     seenFinishedCount = 0;
   }
 
@@ -243,6 +282,7 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     renderQuality = pickRenderQualityProfile(cssW, cssH);
     // For tall boards, fit width and use a scrolling camera for Y.
     const s = Math.min(cssW / board.worldW, 1.6);
+    baseScale = s;
     view.scale = s;
     view.ox = (cssW - board.worldW * s) / 2;
     view.oy = 0;
@@ -781,6 +821,164 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     ctx.restore();
   }
 
+  function resetFinishCinematicState(): void {
+    finishCinematic.active = false;
+    finishCinematic.enteredAtMs = 0;
+    finishCinematic.impactAtMs = 0;
+    finishCinematic.settleUntilMs = 0;
+    finishCinematic.exitHoldUntilMs = 0;
+  }
+
+  function updateFinishCinematic(state: GameState, nowMs: number): FinishCinematicFrame {
+    const inactiveFrame: FinishCinematicFrame = {
+      active: false,
+      leaderY: Number.NEGATIVE_INFINITY,
+      leaderProgress: 0,
+      remaining: 0,
+      zoom: 1,
+      pulse: 0,
+      shakeYOffset: 0,
+    };
+
+    if (state.mode !== "playing" || !state.released) {
+      resetFinishCinematicState();
+      return inactiveFrame;
+    }
+
+    const remaining = Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length);
+    let leaderY = Number.NEGATIVE_INFINITY;
+    for (const marble of state.marbles) {
+      if (marble.done) continue;
+      if (marble.y > leaderY) leaderY = marble.y;
+    }
+
+    if (!Number.isFinite(leaderY)) {
+      if (!state.winner) resetFinishCinematicState();
+      return inactiveFrame;
+    }
+
+    const triggerY = board.worldH * FINISH_CINEMA_TRIGGER_Y_FRAC;
+    const leaderProgress = clamp(
+      (leaderY - triggerY) / Math.max(1, board.worldH - triggerY),
+      0,
+      1
+    );
+    const shouldActivate =
+      !state.winner &&
+      remaining > 0 &&
+      remaining <= resolveFinishTriggerRemaining(state.finishTriggerRemaining, state.totalToDrop) &&
+      leaderY > triggerY;
+
+    if (shouldActivate && !finishCinematic.active) {
+      finishCinematic.active = true;
+      finishCinematic.enteredAtMs = nowMs;
+      finishCinematic.impactAtMs = 0;
+      finishCinematic.settleUntilMs = 0;
+      finishCinematic.exitHoldUntilMs = 0;
+    }
+
+    if (!shouldActivate && !state.winner) {
+      resetFinishCinematicState();
+      return inactiveFrame;
+    }
+
+    if (state.winner && finishCinematic.active && finishCinematic.impactAtMs <= 0) {
+      finishCinematic.impactAtMs = nowMs;
+      finishCinematic.settleUntilMs = nowMs + FINISH_CINEMA_SETTLE_MS;
+      finishCinematic.exitHoldUntilMs = nowMs + FINISH_CINEMA_EXIT_HOLD_MS;
+    }
+
+    if (state.winner && finishCinematic.active && nowMs > finishCinematic.exitHoldUntilMs) {
+      resetFinishCinematicState();
+      return inactiveFrame;
+    }
+
+    if (!finishCinematic.active) return inactiveFrame;
+
+    const elapsed = Math.max(0, nowMs - finishCinematic.enteredAtMs);
+    const introT = clamp(elapsed / FINISH_CINEMA_ZOOM_IN_MS, 0, 1);
+    const zoomTarget = lerp(FINISH_CINEMA_ZOOM_MIN, FINISH_CINEMA_ZOOM_MAX, leaderProgress);
+    let zoom = lerp(1, zoomTarget, easeOutCubic(introT));
+    const pulse = 0.5 + 0.5 * Math.sin(nowMs / 240);
+
+    let shakeYOffset = 0;
+    if (finishCinematic.impactAtMs > 0 && nowMs < finishCinematic.settleUntilMs) {
+      const settleProgress = clamp(
+        (nowMs - finishCinematic.impactAtMs) / Math.max(1, FINISH_CINEMA_SETTLE_MS),
+        0,
+        1
+      );
+      const shake = Math.sin(settleProgress * Math.PI * 4) * (1 - settleProgress);
+      shakeYOffset = shake * 9;
+      zoom += (1 - settleProgress) * 0.015;
+    }
+
+    return {
+      active: true,
+      leaderY,
+      leaderProgress,
+      remaining,
+      zoom,
+      pulse,
+      shakeYOffset,
+    };
+  }
+
+  function drawFinishCinematicOverlay(fx: FinishCinematicFrame): void {
+    if (!fx.active) return;
+
+    const cssW = renderCssW || board.worldW;
+    const cssH = renderCssH || board.worldH;
+    const centerX = cssW * 0.5;
+    const centerY = cssH * 0.58;
+    const vignetteAlpha = 0.22 + fx.leaderProgress * 0.18;
+    const pulseBoost = 0.08 + fx.pulse * 0.12;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.12)";
+    ctx.fillRect(0, 0, cssW, cssH);
+
+    const vignette = ctx.createRadialGradient(
+      centerX,
+      centerY,
+      Math.min(cssW, cssH) * 0.16,
+      centerX,
+      centerY,
+      Math.max(cssW, cssH) * 0.78
+    );
+    vignette.addColorStop(0, "rgba(0,0,0,0)");
+    vignette.addColorStop(1, `rgba(0,0,0,${vignetteAlpha.toFixed(3)})`);
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, cssW, cssH);
+
+    ctx.globalCompositeOperation = "screen";
+    const ringAlpha = 0.11 + pulseBoost;
+    const ringRadius = Math.min(cssW, cssH) * (0.19 + fx.pulse * 0.04);
+    ctx.strokeStyle = `rgba(255,120,120,${ringAlpha.toFixed(3)})`;
+    ctx.shadowColor = `rgba(255,140,140,${(ringAlpha * 0.8).toFixed(3)})`;
+    ctx.shadowBlur = 22;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(centerX, cssH * 0.82, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    const hudLineAlpha = 0.16 + fx.leaderProgress * 0.2;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(255,255,255,${(0.04 + hudLineAlpha * 0.18).toFixed(3)})`;
+    ctx.fillRect(0, 0, cssW, 18);
+    ctx.fillRect(0, cssH - 18, cssW, 18);
+    ctx.strokeStyle = `rgba(255,188,148,${hudLineAlpha.toFixed(3)})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, 18.5);
+    ctx.lineTo(cssW, 18.5);
+    ctx.moveTo(0, cssH - 18.5);
+    ctx.lineTo(cssW, cssH - 18.5);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
   function draw(state: GameState, ballsCatalog: BallCatalogItem[], imagesById: Map<string, HTMLImageElement>): void {
     ensureCatalogLookup(ballsCatalog);
     drawBoardBase(state.t || 0);
@@ -790,15 +988,27 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     }
     trackSlotRipples(state, nowMs);
     trackMarbleTrailsAndImpacts(state, nowMs);
+    const finishFx = updateFinishCinematic(state, nowMs);
 
     // Shared FX time for hue cycling (keeps animating even when game is paused).
     const fxT = ((nowMs - bootMs) / 1000) + (state.t || 0);
+    const zoomFactor = finishFx.active ? finishFx.zoom : 1;
+    view.scale = baseScale * zoomFactor;
+    view.viewHWorld = renderCssH / Math.max(0.0001, view.scale);
 
     // Camera:
     // - manual: minimap / view lock can set cameraOverrideY (works even before starting).
     // - auto: in-play, follow the "tail" (smallest y among not-finished marbles).
     if (typeof view.cameraOverrideY === "number") {
       view.cameraY = clamp(view.cameraOverrideY, 0, Math.max(0, board.worldH - view.viewHWorld));
+    } else if (finishFx.active) {
+      const cameraBias = lerp(0.46, 0.4, finishFx.leaderProgress);
+      const desired = clamp(
+        finishFx.leaderY - view.viewHWorld * cameraBias + finishFx.shakeYOffset,
+        0,
+        Math.max(0, board.worldH - view.viewHWorld)
+      );
+      view.cameraY = view.cameraY + (desired - view.cameraY) * 0.18;
     } else if (state.mode === "playing" && state.released) {
       let targetY = 0;
       let found = false;
@@ -1216,6 +1426,7 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     drawLastFewHighlight(state, nowMs);
 
     ctx.restore();
+    drawFinishCinematicOverlay(finishFx);
   }
 
   return {
@@ -1288,6 +1499,11 @@ function corridorAt(board: Board, y: number): SpawnBounds {
 function smoothstep(x: number): number {
   const t = clamp(x, 0, 1);
   return t * t * (3 - 2 * t);
+}
+
+function easeOutCubic(x: number): number {
+  const t = clamp(x, 0, 1);
+  return 1 - (1 - t) * (1 - t) * (1 - t);
 }
 
 function lerp(a: number, b: number, t: number): number {

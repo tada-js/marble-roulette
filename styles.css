@@ -1207,7 +1207,7 @@ canvas#game {
   border-radius: 12px;
   padding: 8px 12px;
   display: grid;
-  grid-template-columns: 30px 40px minmax(0, 1fr) auto;
+  grid-template-columns: 30px 40px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -1780,6 +1780,7 @@ dialog.dialog--winner::backdrop {
     max-width: min(68vw, 260px);
     padding-right: 0;
     margin-right: 0;
+    align-items: center;
   }
   .topbar__right {
     grid-area: right;
@@ -1816,6 +1817,17 @@ dialog.dialog--winner::backdrop {
   .statusBadge {
     min-height: 32px;
     padding: 0 2px;
+  }
+  .brand__wording {
+    display: inline-flex;
+    align-items: center;
+  }
+  .brand__title {
+    align-items: center;
+    line-height: 1.1;
+  }
+  .brand__mark {
+    align-self: center;
   }
 }
 

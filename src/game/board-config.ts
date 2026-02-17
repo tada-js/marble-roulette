@@ -46,11 +46,19 @@ export const CUSTOM_ROTORS: CustomRotorInput[] = [
   { xFrac: 0.507, yFrac: 0.557, omega: 11.8 },
   { xFrac: 0.192, yFrac: 0.673, omega: -12.0 },
   { xFrac: 0.737, yFrac: 0.673, omega: 12.0 },
-  { xFrac: 0.440, yFrac: 0.796, omega: -11.8 },
   { xFrac: 0.540, yFrac: 0.858, omega: 12.0 },
   { xFrac: 0.358, yFrac: 0.859, omega: -12.0 },
+  { xFrac: 0.472, yFrac: 0.891, omega: 11.8 },
+  { xFrac: 0.676, yFrac: 0.901, omega: -11.8 },
+  { xFrac: 0.515, yFrac: 0.914, omega: 12.0 },
+  { xFrac: 0.669, yFrac: 0.918, omega: -12.0 },
   { xFrac: 0.494, yFrac: 0.949, omega: -12.2 },
   { xFrac: 0.509, yFrac: 0.943, omega: 12.2 },
+  { xFrac: 0.464, yFrac: 0.957, omega: 11.8 },
+  { xFrac: 0.543, yFrac: 0.956, omega: -11.8 },
+  { xFrac: 0.457, yFrac: 0.972, omega: 12.0 },
+  { xFrac: 0.520, yFrac: 0.980, omega: -12.0 },
+  { xFrac: 0.468, yFrac: 0.987, omega: 11.8 },
 ];
 
 /**

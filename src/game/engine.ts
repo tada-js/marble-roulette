@@ -219,6 +219,7 @@ export type GameState = {
   pending: Marble[];
   released: boolean;
   totalToDrop: number;
+  finishTriggerRemaining: number;
   finished: FinishedMarble[];
   winner: FinishedMarble | null;
   _binCounts: number[];
@@ -428,6 +429,7 @@ export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog =
     pending: [],
     released: false,
     totalToDrop: 0,
+    finishTriggerRemaining: 4,
     finished: [],
     winner: null,
     _binCounts: Array.from({ length: board.slotCount }, () => 0),
@@ -439,12 +441,12 @@ export function makeGameState({ seed = 1234, board = makeBoard(), ballsCatalog =
 
 export function setBallCount(state: GameState, id: string, count: number): void {
   if (!state.ballsCatalog.some((b) => b.id === id)) return;
-  const safe = clampInt(Number(count) || 0, 0, 99);
+  const safe = clampInt(Number(count) || 0, 1, 99);
   state.counts[id] = safe;
 }
 
 export function getBallCount(state: GameState, id: string): number {
-  return clampInt(state.counts?.[id] ?? 0, 0, 99);
+  return clampInt(state.counts?.[id] ?? 1, 1, 99);
 }
 
 export function getTotalSelectedCount(state: GameState): number {
