@@ -91,6 +91,7 @@ export type UiActions = {
   cancelDiscardSettings: () => void;
   addCatalogBall: () => boolean;
   removeCatalogBall: (ballId: string) => boolean;
+  reorderCatalogBall: (sourceBallId: string, targetBallId: string) => boolean;
   restoreDefaultCatalog: () => boolean;
   setCatalogBallName: (ballId: string, name: string) => boolean;
   setCatalogBallImage: (ballId: string, file: File) => Promise<boolean> | boolean;
@@ -175,6 +176,7 @@ let actions: UiActions = {
   cancelDiscardSettings: NOOP_VOID,
   addCatalogBall: NOOP_FALSE,
   removeCatalogBall: NOOP_FALSE,
+  reorderCatalogBall: NOOP_FALSE,
   restoreDefaultCatalog: NOOP_FALSE,
   setCatalogBallName: NOOP_FALSE,
   setCatalogBallImage: NOOP_FALSE,
