@@ -43,11 +43,28 @@ export function createLoopController<State extends { mode?: string; paused?: boo
   let last = performance.now();
   const fixedStepSec = 1 / 60;
   const fixedStepMs = 1000 / 60;
-  const maxCatchUpSteps = 6;
-  let simAccumulatorMs = 0;
+  type FrameBudgetPolicy = {
+    maxSpeedMultiplier: number;
+    maxCatchUpSteps: number;
+    maxElapsedMs: number;
+  };
+  const frameBudgetPolicies: FrameBudgetPolicy[] = [
+    { maxSpeedMultiplier: 1.01, maxCatchUpSteps: 2, maxElapsedMs: 40 },
+    { maxSpeedMultiplier: 1.5, maxCatchUpSteps: 3, maxElapsedMs: 56 },
+    { maxSpeedMultiplier: 2.1, maxCatchUpSteps: 4, maxElapsedMs: 72 },
+    { maxSpeedMultiplier: Number.POSITIVE_INFINITY, maxCatchUpSteps: 5, maxElapsedMs: 88 },
+  ];
   let speedMultiplier = Number.isFinite(initialSpeedMultiplier)
     ? Math.max(0.5, Math.min(3, initialSpeedMultiplier))
     : 1;
+
+  const fallbackFrameBudget = frameBudgetPolicies[frameBudgetPolicies.length - 1];
+  function getFrameBudgetPolicy(): FrameBudgetPolicy {
+    for (const policy of frameBudgetPolicies) {
+      if (speedMultiplier <= policy.maxSpeedMultiplier) return policy;
+    }
+    return fallbackFrameBudget;
+  }
 
   function draw(): void {
     renderer.draw(state, getBallsCatalog(), getImagesById());
@@ -62,8 +79,9 @@ export function createLoopController<State extends { mode?: string; paused?: boo
     const rawMs = Number(ms);
     const safeMs = Number.isFinite(rawMs) ? Math.max(0, rawMs) : 0;
     const scaledMs = safeMs * speedMultiplier;
-    const maxStepBudgetMs = fixedStepMs * maxCatchUpSteps;
-    const budgetMs = Math.min(maxStepBudgetMs, scaledMs);
+    const frameBudget = getFrameBudgetPolicy();
+    const maxStepBudgetMs = fixedStepMs * frameBudget.maxCatchUpSteps;
+    const budgetMs = Math.min(maxStepBudgetMs, frameBudget.maxElapsedMs, scaledMs);
     const steps = Math.max(1, Math.round(budgetMs / fixedStepMs));
     for (let i = 0; i < steps; i++) stepFn(state, fixedStepSec);
     draw();
@@ -91,19 +109,8 @@ export function createLoopController<State extends { mode?: string; paused?: boo
       const elapsedMs = Math.max(0, now - last);
       last = now;
       if (state.mode === "playing" && !state.paused) {
-        simAccumulatorMs += Math.min(120, elapsedMs) * speedMultiplier;
-        const maxAccumulatedMs = fixedStepMs * maxCatchUpSteps;
-        if (simAccumulatorMs > maxAccumulatedMs) simAccumulatorMs = maxAccumulatedMs;
-        let steps = 0;
-        while (simAccumulatorMs >= fixedStepMs && steps < maxCatchUpSteps) {
-          stepFn(state, fixedStepSec);
-          simAccumulatorMs -= fixedStepMs;
-          steps += 1;
-        }
-        draw();
-        onAfterFrame();
+        tickFixed(elapsedMs);
       } else {
-        simAccumulatorMs = 0;
         draw();
       }
       requestAnimationFrame(raf);
