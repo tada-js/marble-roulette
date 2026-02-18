@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>오프라인 | 데구르르</title>
+    <meta name="theme-color" content="#0b1020" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background:
+          radial-gradient(1200px 900px at 20% 10%, rgba(255, 176, 0, 0.12), transparent 60%),
+          radial-gradient(900px 700px at 80% 20%, rgba(69, 243, 195, 0.1), transparent 60%),
+          linear-gradient(180deg, #0b1220, #1b2a4a);
+        color: #eaf1ff;
+      }
+      .offlineWrap {
+        min-height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      .offlineCard {
+        width: min(420px, 100%);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(8, 12, 22, 0.76);
+        box-shadow: 0 24px 72px rgba(0, 0, 0, 0.42);
+        padding: 20px;
+      }
+      .offlineTitle {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .offlineDesc {
+        margin: 10px 0 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: rgba(234, 241, 255, 0.8);
+      }
+      .offlineActions {
+        margin-top: 16px;
+        display: flex;
+        gap: 8px;
+      }
+      .offlineButton {
+        appearance: none;
+        border: 1px solid rgba(69, 243, 195, 0.45);
+        border-radius: 10px;
+        background: rgba(69, 243, 195, 0.12);
+        color: #eaf1ff;
+        font-weight: 700;
+        height: 38px;
+        padding: 0 14px;
+        cursor: pointer;
+      }
+      .offlineButton:active {
+        transform: translateY(1px);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="offlineWrap">
+      <section class="offlineCard" role="status" aria-live="polite">
+        <h1 class="offlineTitle">오프라인 상태입니다</h1>
+        <p class="offlineDesc">네트워크 연결 후 다시 시도해 주세요. 연결이 복구되면 게임을 바로 이어서 사용할 수 있어요.</p>
+        <div class="offlineActions">
+          <button class="offlineButton" type="button" onclick="window.location.reload()">다시 시도</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

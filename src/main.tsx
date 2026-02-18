@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { bootstrapGameApp } from "./app/create-game-app";
 import { AppShell } from "./ui-react/AppShell";
+import { registerServiceWorker } from "./pwa/register-service-worker";
 
 declare global {
   interface Window {
@@ -37,3 +38,4 @@ const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("루트 엘리먼트를 찾을 수 없습니다: #root");
 
 createRoot(rootEl).render(<App />);
+registerServiceWorker();
