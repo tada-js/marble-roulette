@@ -103,25 +103,60 @@ export function mountMinimapController(opts) {
     }
   }
 
-  if (minimap) {
-    const onPick = (e) => {
-      viewState.tailFocusOn = false;
-      onTailFocusChange(false);
-      const rect = minimap.getBoundingClientRect();
-      const y = (e.clientY - rect.top) / rect.height;
-      const v = renderer.getViewState?.();
-      const viewH = v?.viewHWorld ?? board.worldH;
-      const desired = y * board.worldH - viewH * 0.5;
-      renderer.setCameraOverrideY?.(desired);
-      updateControls();
-    };
-    minimap.addEventListener("pointerdown", onPick);
-    minimap.addEventListener("pointermove", (e) => {
-      if (e.buttons !== 1) return;
-      onPick(e);
-    });
+  function shouldDrawMinimap() {
+    if (!minimap) return false;
+    const rect = minimap.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) return false;
+    if (document.hidden) return false;
+    return true;
   }
 
-  setInterval(drawMinimap, 100);
-  return { drawMinimap };
+  function getMinimapTickMs() {
+    if (document.hidden) return 520;
+    if (state.mode === "playing") return 120;
+    return 220;
+  }
+
+  const onPick = (e) => {
+    if (!minimap) return;
+    viewState.tailFocusOn = false;
+    onTailFocusChange(false);
+    const rect = minimap.getBoundingClientRect();
+    const y = (e.clientY - rect.top) / rect.height;
+    const v = renderer.getViewState?.();
+    const viewH = v?.viewHWorld ?? board.worldH;
+    const desired = y * board.worldH - viewH * 0.5;
+    renderer.setCameraOverrideY?.(desired);
+    updateControls();
+  };
+  const onPointerMove = (e) => {
+    if (e.buttons !== 1) return;
+    onPick(e);
+  };
+
+  if (minimap) {
+    minimap.addEventListener("pointerdown", onPick);
+    minimap.addEventListener("pointermove", onPointerMove);
+  }
+
+  let minimapTimer = 0;
+  function scheduleMinimapDraw() {
+    minimapTimer = window.setTimeout(() => {
+      if (shouldDrawMinimap()) drawMinimap();
+      scheduleMinimapDraw();
+    }, getMinimapTickMs());
+  }
+  scheduleMinimapDraw();
+
+  function dispose() {
+    if (minimapTimer) {
+      window.clearTimeout(minimapTimer);
+      minimapTimer = 0;
+    }
+    if (!minimap) return;
+    minimap.removeEventListener("pointerdown", onPick);
+    minimap.removeEventListener("pointermove", onPointerMove);
+  }
+
+  return { drawMinimap, dispose };
 }

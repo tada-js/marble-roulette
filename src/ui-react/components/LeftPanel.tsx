@@ -83,6 +83,7 @@ export function LeftPanel(props: LeftPanelProps) {
   const showParticipants = !isMobileViewport || participantsFoldOpen;
   const showResultOption = !isMobileViewport || resultFoldOpen;
   const showStartCaption = !isMobileViewport || captionFoldOpen;
+  const showMinimapFocusIcon = isMobileViewport;
   const mobileHudFoldAriaLabel = mobileHudFoldOpen ? "메뉴 닫기" : "메뉴 열기";
   const participantTitle = `참가자 목록(${totalParticipants})`;
   const participantFoldAriaLabel = showParticipants ? "참가자 목록 접기" : "참가자 목록 펼치기";
@@ -289,6 +290,18 @@ export function LeftPanel(props: LeftPanelProps) {
           </label>
         </div>
         <canvas id="minimap" width="260" height="190"></canvas>
+        {showMinimapFocusIcon && (
+          <IconButton
+            className={`mini__refocus ${viewLockChecked ? "is-on" : ""}`}
+            ariaLabel={viewLockChecked ? "시점 고정 해제" : "시점 고정 켜기"}
+            ariaPressed={viewLockChecked}
+            title={viewLockChecked ? "시점 고정 ON" : "시점 고정 OFF"}
+            disabled={viewLockDisabled}
+            onClick={() => onToggleViewLock(!viewLockChecked)}
+          >
+            <AppIcon name="lock" />
+          </IconButton>
+        )}
         <div className="mini__hint" id="minimap-hint">
           미니맵을 클릭해 이동하고, 시점 고정을 켜면 자동 추적으로 돌아갑니다.
         </div>
@@ -310,6 +323,26 @@ export function LeftPanel(props: LeftPanelProps) {
       )}
 
       <div className="hud__content" id="mobile-hud-content">
+        {isMobileViewport && (
+          <div className="hudMobileSheet__header">
+            <div className="hudMobileSheet__handle" aria-hidden="true"></div>
+            <div className="hudMobileSheet__titleRow">
+              <div className="hudMobileSheet__titleWrap">
+                <div className="hudMobileSheet__title">게임 설정</div>
+                <div className="hudMobileSheet__subtitle">항목을 눌러 펼치세요</div>
+              </div>
+              <IconButton
+                className="hudMobileSheet__closeBtn"
+                ariaLabel="메뉴 닫기"
+                title="메뉴 닫기"
+                onClick={() => setMobileHudFoldOpen(false)}
+              >
+                <span aria-hidden="true">✕</span>
+              </IconButton>
+            </div>
+          </div>
+        )}
+
         <section className={participantSectionClassName}>
           {isMobileViewport ? (
             <button
@@ -330,7 +363,15 @@ export function LeftPanel(props: LeftPanelProps) {
           )}
           {isMobileViewport && showParticipants && (
             <div className="participantSection__actions">
-              <Button id="settings-btn" variant="ghost" size="sm" disabled={isLocked} onClick={onOpenSettings}>
+              <Button
+                id="settings-btn"
+                variant="accent"
+                size="md"
+                width="full"
+                className="participantSection__settingsBtn"
+                disabled={isLocked}
+                onClick={onOpenSettings}
+              >
                 참가자 설정
               </Button>
             </div>
@@ -436,6 +477,7 @@ export function LeftPanel(props: LeftPanelProps) {
             <button
               type="button"
               className="mobileFold__toggle"
+              aria-label={showResultOption ? "당첨자 수 접기" : "당첨자 수 펼치기"}
               aria-expanded={showResultOption}
               aria-controls="result-option-body"
               onClick={() => setResultFoldOpen((prev) => !prev)}
@@ -511,6 +553,7 @@ export function LeftPanel(props: LeftPanelProps) {
             <button
               type="button"
               className="mobileFold__toggle"
+              aria-label={showStartCaption ? "시작지점 문구 접기" : "시작지점 문구 펼치기"}
               aria-expanded={showStartCaption}
               aria-controls="start-caption-body"
               onClick={() => setCaptionFoldOpen((prev) => !prev)}

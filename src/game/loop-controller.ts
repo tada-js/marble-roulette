@@ -41,6 +41,10 @@ export function createLoopController<State extends { mode?: string; paused?: boo
 
   let resizeRaf = 0;
   let last = performance.now();
+  const fixedStepSec = 1 / 60;
+  const fixedStepMs = 1000 / 60;
+  const maxCatchUpSteps = 6;
+  let simAccumulatorMs = 0;
   let speedMultiplier = Number.isFinite(initialSpeedMultiplier)
     ? Math.max(0.5, Math.min(3, initialSpeedMultiplier))
     : 1;
@@ -55,9 +59,13 @@ export function createLoopController<State extends { mode?: string; paused?: boo
    * @param {number} ms
    */
   function tickFixed(ms: number): void {
-    const dt = 1 / 60;
-    const steps = Math.max(1, Math.round((ms / 1000) / dt));
-    for (let i = 0; i < steps; i++) stepFn(state, dt);
+    const rawMs = Number(ms);
+    const safeMs = Number.isFinite(rawMs) ? Math.max(0, rawMs) : 0;
+    const scaledMs = safeMs * speedMultiplier;
+    const maxStepBudgetMs = fixedStepMs * maxCatchUpSteps;
+    const budgetMs = Math.min(maxStepBudgetMs, scaledMs);
+    const steps = Math.max(1, Math.round(budgetMs / fixedStepMs));
+    for (let i = 0; i < steps; i++) stepFn(state, fixedStepSec);
     draw();
     onAfterFrame();
   }
@@ -80,10 +88,24 @@ export function createLoopController<State extends { mode?: string; paused?: boo
 
   function startAnimationLoop(): void {
     function raf(now: number): void {
-      const dtMs = Math.min(40, now - last);
+      const elapsedMs = Math.max(0, now - last);
       last = now;
-      if (state.mode === "playing" && !state.paused) tickFixed(dtMs * speedMultiplier);
-      else draw();
+      if (state.mode === "playing" && !state.paused) {
+        simAccumulatorMs += Math.min(120, elapsedMs) * speedMultiplier;
+        const maxAccumulatedMs = fixedStepMs * maxCatchUpSteps;
+        if (simAccumulatorMs > maxAccumulatedMs) simAccumulatorMs = maxAccumulatedMs;
+        let steps = 0;
+        while (simAccumulatorMs >= fixedStepMs && steps < maxCatchUpSteps) {
+          stepFn(state, fixedStepSec);
+          simAccumulatorMs -= fixedStepMs;
+          steps += 1;
+        }
+        draw();
+        onAfterFrame();
+      } else {
+        simAccumulatorMs = 0;
+        draw();
+      }
       requestAnimationFrame(raf);
     }
     requestAnimationFrame(raf);

@@ -63,5 +63,8 @@ export function mountViewControls(opts) {
   return {
     drawMinimap: minimapController.drawMinimap,
     isCoordMode: coordModeController.isCoordMode,
+    dispose: () => {
+      minimapController.dispose?.();
+    },
   };
 }

@@ -176,6 +176,13 @@ function pickRenderQualityProfile(cssW: number, cssH: number): RenderQualityProf
   return RENDER_QUALITY_PROFILES.high;
 }
 
+function isLowPowerViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  const mediaQuery = window.matchMedia?.("(pointer: coarse)");
+  if (mediaQuery?.matches) return true;
+  return false;
+}
+
 function getFixedEntities(board: Board): FixedEntity[] | null {
   if (board.roulette?.entities?.length) return board.roulette.entities;
   if (board.zigzag?.entities?.length) return board.zigzag.entities;
@@ -200,6 +207,10 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
   let renderPixelRatio = 1;
   let baseScale = 1;
   let renderQuality = pickRenderQualityProfile(renderCssW, renderCssH);
+  let lowPowerViewport = isLowPowerViewport();
+  if (lowPowerViewport && renderQuality.level === "high") {
+    renderQuality = RENDER_QUALITY_PROFILES.medium;
+  }
   const hashStr = (s: string): number => {
     // Small deterministic hash for stable per-entity color offsets.
     let h = 2166136261 >>> 0;
@@ -280,6 +291,10 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     renderCssW = cssW;
     renderCssH = cssH;
     renderQuality = pickRenderQualityProfile(cssW, cssH);
+    lowPowerViewport = isLowPowerViewport();
+    if (lowPowerViewport && renderQuality.level === "high") {
+      renderQuality = RENDER_QUALITY_PROFILES.medium;
+    }
     // For tall boards, fit width and use a scrolling camera for Y.
     const s = Math.min(cssW / board.worldW, 1.6);
     baseScale = s;

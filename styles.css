@@ -856,6 +856,54 @@ canvas#game {
 .hud__mobileScrim {
   display: none;
 }
+.hudMobileSheet__header {
+  display: none;
+}
+.hudMobileSheet__handle {
+  width: 46px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.28);
+  margin: 0 auto;
+}
+.hudMobileSheet__titleRow {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.hudMobileSheet__titleWrap {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.hudMobileSheet__title {
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  color: rgba(237, 245, 255, 0.95);
+}
+.hudMobileSheet__subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(212, 226, 245, 0.76);
+}
+.hudMobileSheet__closeBtn.iconBtn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 10px;
+  border-color: rgba(255,255,255,0.26);
+  color: rgba(241,247,255,0.9);
+}
+.hudMobileSheet__closeBtn.iconBtn > span {
+  display: inline-block;
+  line-height: 1;
+  font-size: 16px;
+  font-weight: 700;
+  transform: translateY(-0.5px);
+}
 .resultOption {
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: 14px;
@@ -1156,6 +1204,9 @@ canvas#game {
   color: var(--muted);
   line-height: 1.35;
   white-space: pre-line;
+}
+.mini__refocus {
+  display: none;
 }
 /* Coordinate tooling is hidden by default; enable via secret toggle (see src/main.jsx). */
 .board__coords { display: none; }
@@ -1870,6 +1921,10 @@ dialog.dialog--winner::backdrop {
 }
 
 @media (max-width: 720px) {
+  :root {
+    --mobile-minimap-bottom: max(10px, env(safe-area-inset-bottom));
+    --mobile-minimap-h: min(25vh, 104px);
+  }
   .mini {
     pointer-events: auto;
   }
@@ -1916,12 +1971,14 @@ dialog.dialog--winner::backdrop {
     right: 0;
     bottom: 0;
     margin: 0;
-    padding: 12px max(12px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom))
+    padding: 12px max(12px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom))
       max(12px, env(safe-area-inset-left));
-    max-height: min(74dvh, 560px);
+    max-height: min(80dvh, 620px);
     overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     border-top: 1px solid rgba(255,255,255,0.16);
-    border-radius: 16px 16px 0 0;
+    border-radius: 18px 18px 0 0;
     background: linear-gradient(180deg, rgba(18,26,46,0.98), rgba(10,16,31,0.96));
     box-shadow: 0 -16px 40px rgba(0,0,0,0.46);
     transform: translateY(calc(100% + 24px));
@@ -1929,6 +1986,31 @@ dialog.dialog--winner::backdrop {
     visibility: hidden;
     pointer-events: none;
     transition: transform 220ms ease, opacity 180ms ease, visibility 180ms ease;
+  }
+  .hudMobileSheet__header {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: -12px -12px 12px;
+    padding: 10px 12px 10px;
+    background: linear-gradient(180deg, rgba(18,26,46,0.98), rgba(18,26,46,0.86));
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(6px);
+  }
+  .hudMobileSheet__title {
+    font-size: 15px;
+  }
+  .hudMobileSheet__subtitle {
+    font-size: 11px;
+  }
+  .hudMobileSheet__closeBtn.iconBtn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+  }
+  .hud__content > * + * {
+    margin-top: 14px;
   }
   .hud.is-mobile-open .hud__mobileScrim {
     opacity: 1;
@@ -1967,6 +2049,39 @@ dialog.dialog--winner::backdrop {
     row-gap: 5px;
     column-gap: 5px;
     border-radius: 10px;
+  }
+  .topbar--run .topbar__center {
+    --topbar-run-btn-w: var(--btn-w-sm);
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-template-areas:
+      "status status"
+      "start stop";
+    align-items: center;
+    justify-content: center;
+    column-gap: 8px;
+    row-gap: 6px;
+    padding: 6px;
+  }
+  .topbar--run .topbar__start {
+    grid-area: start;
+    width: var(--topbar-run-btn-w);
+    justify-self: end;
+  }
+  .topbar--run .statusBadge {
+    grid-area: status;
+    min-width: 0;
+    justify-self: center;
+  }
+  .topbar--run .topbar__runActions {
+    grid-area: stop;
+    width: auto;
+    justify-content: flex-start;
+  }
+  .topbar--run .topbar__runActions .topbar__stop.btn {
+    width: var(--topbar-run-btn-w);
+    max-width: var(--topbar-run-btn-w);
+    min-width: 0;
   }
   .topbar__right {
     gap: 5px;
@@ -2038,22 +2153,95 @@ dialog.dialog--winner::backdrop {
   .panelCard--participants.is-mobileFold,
   .resultOption.is-mobileFold,
   .startCaption.is-mobileFold {
-    padding: 8px;
-    border-radius: 12px;
+    padding: 11px;
+    border-radius: 15px;
+    border-color: rgba(255,255,255,0.2);
+    background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04));
   }
   .panelCard--participants.is-mobileFold .mobileFold__toggle,
   .resultOption.is-mobileFold .mobileFold__toggle,
   .startCaption.is-mobileFold .mobileFold__toggle {
-    min-height: 34px;
-    height: 34px;
+    min-height: 46px;
+    height: 46px;
+    border-radius: 12px;
+    padding: 0 15px;
+    font-size: 13px;
   }
   .panelCard--participants.is-mobileFold .participantSection__actions {
-    margin: 8px 0 8px;
+    margin: 12px 0 10px;
   }
   .panelCard--participants.is-mobileFold .participantSection__actions .btn {
+    width: 100%;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 12px;
+  }
+  .participantSection__settingsBtn.btn {
+    font-size: 13px;
+    font-weight: 900;
+  }
+  .participantRow {
+    border-radius: 14px;
+    padding: 10px 11px;
+    gap: 9px;
+  }
+  .participantRow__qty {
+    grid-template-columns: 36px 60px 36px;
+    gap: 8px;
+  }
+  .participantRow__qtyBtn {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    border-radius: 11px;
+  }
+  .participantRow__count {
+    width: 60px;
+    height: 36px;
+    font-size: 15px;
+  }
+  .resultOption__label,
+  .startCaption__label {
+    font-size: 13px;
+  }
+  .resultOption__stepper {
+    grid-template-columns: 40px minmax(0, 1fr) 40px;
+    gap: 10px;
+  }
+  .resultOption__stepBtn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+  }
+  .resultOption__input {
+    min-height: 40px;
+    font-size: 16px;
+    font-weight: 800;
+  }
+  .resultOption__viewBtn.btn {
     min-height: 32px;
     height: 32px;
     padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(179, 232, 246, 0.42);
+    background: rgba(179, 232, 246, 0.16);
+    color: rgba(222, 248, 255, 0.96);
+    font-size: 12px;
+    text-decoration: none;
+  }
+  .resultOption__helper {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .startCaption__input {
+    min-height: 40px;
+    font-size: 14px;
+  }
+  .startCaption__hint {
+    font-size: 12px;
   }
   .mini {
     border: none;
@@ -2069,9 +2257,9 @@ dialog.dialog--winner::backdrop {
   #minimap {
     position: fixed;
     right: max(10px, env(safe-area-inset-right));
-    bottom: max(10px, env(safe-area-inset-bottom));
+    bottom: var(--mobile-minimap-bottom);
     width: min(34vw, 138px);
-    height: min(25vh, 104px);
+    height: var(--mobile-minimap-h);
     min-width: 110px;
     min-height: 84px;
     border-radius: 12px;
@@ -2079,6 +2267,56 @@ dialog.dialog--winner::backdrop {
     background: rgba(0, 0, 0, 0.24);
     box-shadow: 0 10px 26px rgba(0,0,0,0.42);
     z-index: 32;
+    transition: opacity 160ms ease, transform 180ms ease;
+    transform-origin: right bottom;
+  }
+  .mini__refocus.iconBtn {
+    display: inline-grid;
+    place-items: center;
+    pointer-events: auto;
+    position: fixed;
+    right: max(10px, env(safe-area-inset-right));
+    bottom: calc(var(--mobile-minimap-bottom) + var(--mobile-minimap-h) + 8px);
+    z-index: 33;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 11px;
+    border-color: rgba(175, 228, 246, 0.46);
+    background: rgba(16, 34, 52, 0.72);
+    color: rgba(220, 246, 255, 0.96);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
+  }
+  .mini__refocus.iconBtn > svg {
+    width: 16px;
+    height: 16px;
+  }
+  .mini__refocus.iconBtn.is-on {
+    border-color: rgba(69, 243, 195, 0.62);
+    background: linear-gradient(180deg, rgba(69,243,195,0.24), rgba(69,243,195,0.1));
+    color: rgba(230, 255, 248, 0.98);
+    box-shadow:
+      0 0 0 1px rgba(69,243,195,0.18),
+      0 10px 22px rgba(0, 0, 0, 0.36),
+      0 0 18px rgba(69,243,195,0.2);
+  }
+  .hud.is-mobile-open #minimap {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+    pointer-events: none;
+  }
+  .hud.is-mobile-open .mini__refocus.iconBtn {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+  }
+  .startCaption.is-mobileFold #start-caption-body {
+    display: grid;
+    gap: 12px;
+    padding-top: 12px;
+  }
+  .startCaption.is-mobileFold .startCaption__hint {
+    line-height: 1.5;
   }
   .boardCountdown__value {
     min-width: 122px;
@@ -2097,6 +2335,16 @@ dialog.dialog--winner::backdrop {
   }
   .topbar__center {
     justify-content: center;
+  }
+  .topbar--run .topbar__center {
+    --topbar-run-btn-w: var(--btn-w-sm);
+    grid-template-columns: auto auto;
+    grid-template-areas:
+      "status status"
+      "start stop";
+    column-gap: 6px;
+    row-gap: 6px;
+    padding: 6px;
   }
   .statusBadge {
     font-size: 11px;
@@ -2118,6 +2366,11 @@ dialog.dialog--winner::backdrop {
     flex: 1 1 140px;
     min-width: 0;
     max-width: 150px;
+  }
+  .topbar--run .topbar__runActions .topbar__stop.btn {
+    flex: 0 0 auto;
+    width: var(--topbar-run-btn-w);
+    max-width: var(--topbar-run-btn-w);
   }
   .participantRow {
     grid-template-columns: 26px 34px minmax(0, 1fr) auto;
@@ -2174,6 +2427,10 @@ dialog.dialog--winner::backdrop {
 }
 
 @media (max-width: 390px) {
+  :root {
+    --mobile-minimap-bottom: max(8px, env(safe-area-inset-bottom));
+    --mobile-minimap-h: min(24vh, 96px);
+  }
   .topbar__left {
     max-width: min(62vw, 160px);
   }
@@ -2182,11 +2439,23 @@ dialog.dialog--winner::backdrop {
   }
   #minimap {
     width: min(36vw, 128px);
-    height: min(24vh, 96px);
+    height: var(--mobile-minimap-h);
     min-width: 96px;
     min-height: 74px;
     right: max(8px, env(safe-area-inset-right));
-    bottom: max(8px, env(safe-area-inset-bottom));
+    bottom: var(--mobile-minimap-bottom);
+  }
+  .mini__refocus.iconBtn {
+    right: max(8px, env(safe-area-inset-right));
+    bottom: calc(var(--mobile-minimap-bottom) + var(--mobile-minimap-h) + 7px);
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 10px;
+  }
+  .mini__refocus.iconBtn > svg {
+    width: 15px;
+    height: 15px;
   }
   .topbar__action {
     --topbar-action-size: 30px;
@@ -2361,13 +2630,16 @@ dialog.dialog--settings::backdrop {
 
 /* Keep participant-settings modal footer position stable when list length changes (e.g. 4 -> 5). */
 .settingsModal.twModal__card--scrollable .twModal__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 .settingsModal.twModal__card--scrollable .twList {
-  --settings-list-height: clamp(420px, 56dvh, 640px);
-  height: var(--settings-list-height);
-  min-height: var(--settings-list-height);
-  max-height: var(--settings-list-height);
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
   overflow: auto;
   overflow-x: hidden;
   align-content: start;
@@ -2955,9 +3227,6 @@ dialog.dialog--settings::backdrop {
 
 @media (max-width: 860px) {
   .twList { grid-template-columns: 1fr; }
-  .settingsModal.twModal__card--scrollable .twList {
-    --settings-list-height: clamp(360px, 50dvh, 560px);
-  }
 }
 
 @media (max-width: 720px) {
@@ -3031,7 +3300,6 @@ dialog.dialog--settings::backdrop {
     gap: 6px;
   }
   .settingsModal.twModal__card--scrollable .twList {
-    --settings-list-height: clamp(300px, 44dvh, 460px);
     padding-right: 2px;
   }
 }

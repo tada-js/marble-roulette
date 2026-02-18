@@ -57,6 +57,7 @@ export function TopBar(props: TopBarProps) {
   const metaText = typeof statusMetaText === "string" && statusMetaText.trim() ? statusMetaText : null;
   const isFastMode = speedMultiplier >= 2;
   const runActionButtons: ReactNode[] = [];
+  const topbarClassName = ["topbar", stopRunVisible ? "topbar--run" : ""].filter(Boolean).join(" ");
 
   if (stopRunVisible) {
     runActionButtons.push(
@@ -76,7 +77,7 @@ export function TopBar(props: TopBarProps) {
   }
 
   return (
-    <header className="topbar">
+    <header className={topbarClassName}>
       <div className="topbar__left brand">
         <div className="brand__mark" aria-hidden="true">
           <span className="brand__markGlyph">DG</span>

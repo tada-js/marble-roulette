@@ -1060,7 +1060,7 @@ export function bootstrapGameApp() {
   syncVisualViewportHeight();
   loopController.scheduleResize();
 
-  mountViewControls({
+  const viewControls = mountViewControls({
     board,
     state,
     renderer,
@@ -1087,6 +1087,7 @@ export function bootstrapGameApp() {
     refreshUi,
     dispose: () => {
       syncLoopSpeed(true);
+      viewControls.dispose?.();
     },
   };
 }
