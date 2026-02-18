@@ -851,7 +851,11 @@ canvas#game {
   transform: translateY(1px);
 }
 
-.hud > * + * { margin-top: 10px; }
+.hud .mini + .hud__content { margin-top: 10px; }
+.hud__content > * + * { margin-top: 10px; }
+.hud__mobileScrim {
+  display: none;
+}
 .resultOption {
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: 14px;
@@ -1866,34 +1870,91 @@ dialog.dialog--winner::backdrop {
 }
 
 @media (max-width: 720px) {
+  .mini {
+    pointer-events: auto;
+  }
   .hud__mobileMenuRow {
     display: flex;
     justify-content: flex-end;
-    margin: 0 0 8px;
-    position: relative;
-    z-index: 2;
+    position: fixed;
+    top: max(calc(env(safe-area-inset-top) + 132px), 132px);
+    right: max(10px, env(safe-area-inset-right));
+    margin: 0;
+    z-index: 132;
+    pointer-events: auto;
   }
-  .hud.is-mobile-collapsed {
-    padding: 6px 12px !important;
+  .hud {
+    position: fixed;
+    inset: 0;
+    padding: 0 !important;
     margin: 0 !important;
-    height: auto !important;
-    max-height: none !important;
     min-height: 0;
+    max-height: none !important;
     overflow: visible;
     border: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
+    pointer-events: none;
+    z-index: 64;
   }
-  .hud.is-mobile-collapsed > :not(.hud__mobileMenuRow) {
-    display: none !important;
+  .hud__mobileScrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.34);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 170ms ease, visibility 170ms ease;
   }
-  .hud.is-mobile-collapsed > .hud__mobileMenuRow {
-    margin: 0 !important;
-    width: 100%;
-    justify-content: flex-end;
+  .hud__content {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 12px max(12px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+    max-height: min(74dvh, 560px);
+    overflow: auto;
+    border-top: 1px solid rgba(255,255,255,0.16);
+    border-radius: 16px 16px 0 0;
+    background: linear-gradient(180deg, rgba(18,26,46,0.98), rgba(10,16,31,0.96));
+    box-shadow: 0 -16px 40px rgba(0,0,0,0.46);
+    transform: translateY(calc(100% + 24px));
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 220ms ease, opacity 180ms ease, visibility 180ms ease;
   }
-  .hud .is-hud-collapsed {
-    display: none;
+  .hud.is-mobile-open .hud__mobileScrim {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .hud.is-mobile-open .hud__content {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .hud.is-mobile-collapsed .hud__content {
+    transform: translateY(calc(100% + 24px));
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .hud__mobileMenuBtn.iconBtn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+  .hud__mobileMenuBtn.iconBtn > svg {
+    width: 18px;
+    height: 18px;
   }
   .topbar {
     gap: 6px;
@@ -1960,7 +2021,14 @@ dialog.dialog--winner::backdrop {
     font-size: 12px;
     border-radius: 10px;
   }
-  .hud { padding: 12px; max-height: clamp(220px, 38dvh, 350px); }
+  .stage { grid-template-rows: 1fr; }
+  .board {
+    min-height: 0;
+    height: 100%;
+  }
+  .hud .mini + .hud__content {
+    margin-top: 0;
+  }
   .panelCard__headerActions .btn {
     min-height: 32px;
     height: 32px;
@@ -2019,7 +2087,7 @@ dialog.dialog--winner::backdrop {
 }
 
 @media (max-width: 520px) {
-  .stage { grid-template-rows: auto 1fr; }
+  .stage { grid-template-rows: 1fr; }
   .topbar {
     padding-top: max(6px, env(safe-area-inset-top));
     padding-bottom: 7px;
@@ -2858,6 +2926,7 @@ dialog.dialog--settings::backdrop {
     height: 100dvh;
     max-height: 100dvh;
     margin: 0;
+    box-sizing: border-box;
     padding:
       max(6px, env(safe-area-inset-top))
       max(6px, env(safe-area-inset-right))
@@ -2876,7 +2945,9 @@ dialog.dialog--settings::backdrop {
   #settings-dialog[open] .settingsModal.twModal__card.twModal__card--scrollable {
     width: 100%;
     height: 100%;
+    min-height: 0;
     max-height: 100%;
+    overflow: hidden;
   }
   .twModal__card.twModal__card--scrollable {
     width: calc(100vw - 12px);
@@ -2890,7 +2961,7 @@ dialog.dialog--settings::backdrop {
     padding: 10px 12px 6px;
   }
   .twModal__card.twModal__card--scrollable .twModal__footer {
-    padding: 10px 12px 12px;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
   }
   .settingsModal .twItem {
     padding: 16px;
