@@ -1,7 +1,6 @@
 import {
   makeGameState,
   makeRng,
-  type FinishedMarble,
   resetGame,
   snapshotForText,
   startGame,
@@ -37,12 +36,32 @@ import {
 } from "./image-upload-policy";
 import { setUiActions, setUiSnapshot } from "./ui-store";
 import { ANALYTICS_EVENTS, trackAnalyticsEvent } from "./analytics";
+import { createArrivalTimingTracker } from "./arrival-timing-tracker";
+import {
+  DEFAULT_START_CAPTION,
+  STATUS_LABEL_BY_TONE,
+  clamp,
+  deriveStatusTone,
+  getFinishTempoMultiplier,
+  getFinishTensionSnapshot,
+  getParticipantCount,
+  getWinnerCountMax,
+  sanitizeBallName,
+  sanitizeStartCaption,
+} from "./game-flow-selectors";
+import {
+  buildIdleResultState,
+  buildResultItems,
+  buildResultStateFromItems,
+  closeResultPresentation,
+  completeSpinResultPresentation,
+  type ResultPresentationState,
+} from "./result-presentation";
 import type {
   InquiryField,
   InquiryForm,
   InquirySubmitResult,
   ResultUiItem,
-  StatusTone,
   UiSnapshot,
 } from "./ui-store";
 
@@ -52,7 +71,6 @@ const EMPTY_INQUIRY_FORM = Object.freeze({
   message: "",
   website: "",
 });
-const DEFAULT_START_CAPTION = "두근두근 당첨자는 누구일까요?";
 
 type UiLocalState = {
   settingsOpen: boolean;
@@ -62,13 +80,7 @@ type UiLocalState = {
   winnerCount: number;
   winnerCountWasClamped: boolean;
   startCaption: string;
-  resultState: {
-    open: boolean;
-    phase: "idle" | "spinning" | "single" | "summary";
-    requestedCount: number;
-    effectiveCount: number;
-    items: ResultUiItem[];
-  };
+  resultState: ResultPresentationState;
   inquiryOpen: boolean;
   inquirySubmitting: boolean;
   inquiryStatus: string;
@@ -99,51 +111,8 @@ type CatalogDraftItem = {
   imageDataUrl: string;
   tint: string;
 };
-
-type FinishTensionSnapshot = {
-  active: boolean;
-  remaining: number;
-  progress: number;
-};
-
-const STATUS_LABEL_BY_TONE: Record<StatusTone, string> = {
-  ready: "준비됨",
-  running: "진행 중",
-  paused: "일시 정지",
-  done: "결과 준비 완료",
-};
-
-// At 3x caption font, ~28 chars keeps 2-line readability on 900px world width.
-const START_CAPTION_MAX = 28;
-const FINISH_TENSION_TRIGGER_Y_FRAC = 0.82;
-const FINISH_TENSION_BASE_SLOWDOWN = 0.72;
-const FINISH_TENSION_SLOWDOWN_BY_REMAINING = {
-  1: 0.5,
-  2: 0.54,
-  3: 0.6,
-} as const;
-const FINISH_TENSION_CAP_BY_REMAINING = {
-  1: 0.56,
-  2: 0.62,
-  3: 0.68,
-} as const;
 const LOOP_SPEED_BLEND_RATIO = 0.3;
 const LOOP_SPEED_EPSILON = 0.002;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function deriveStatusTone(state: {
-  mode?: string;
-  winner?: unknown;
-  paused?: boolean;
-}): StatusTone {
-  if (state.mode !== "playing") return "ready";
-  if (state.winner) return "done";
-  if (state.paused) return "paused";
-  return "running";
-}
 
 function fileToDataUrl(file: File): Promise<string> {
   const validation = validateUploadImageFile(file);
@@ -156,21 +125,6 @@ function fileToDataUrl(file: File): Promise<string> {
     fr.onload = () => resolve(String(fr.result || ""));
     fr.readAsDataURL(file);
   });
-}
-
-function sanitizeBallName(name: unknown, fallback: string): string {
-  const value = String(name || "")
-    .replace(/[\u0000-\u001F\u007F]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 40);
-  return value || fallback;
-}
-
-function sanitizeStartCaption(value: unknown): string {
-  return String(value || "")
-    .replace(/[\u0000-\u001F\u007F]/g, "")
-    .slice(0, START_CAPTION_MAX);
 }
 
 function isDataImageUrl(value: unknown): value is string {
@@ -315,13 +269,7 @@ export function bootstrapGameApp() {
     winnerCount: 1,
     winnerCountWasClamped: false,
     startCaption: DEFAULT_START_CAPTION,
-    resultState: {
-      open: false,
-      phase: "idle",
-      requestedCount: 1,
-      effectiveCount: 0,
-      items: [],
-    },
+    resultState: buildIdleResultState(1),
     inquiryOpen: false,
     inquirySubmitting: false,
     inquiryStatus: "",
@@ -335,11 +283,7 @@ export function bootstrapGameApp() {
   let appliedLoopSpeed = uiState.speedMultiplier;
   let lastFrameUiRefreshAt = 0;
   let lastFrameUiSignature = "";
-  const finishedAtSecondsByMarbleId = new Map<string, number>();
-  let runStartedAtMs = 0;
-  let prevFrameAtMs = 0;
-  let prevFrameSimT = 0;
-  let seenFinishedCount = 0;
+  const arrivalTimingTracker = createArrivalTimingTracker();
 
   const FRAME_UI_THROTTLE_MS = 96;
 
@@ -356,18 +300,12 @@ export function bootstrapGameApp() {
     },
   });
 
-  function getWinnerCountMax() {
-    if (state.totalToDrop > 0) return Math.max(1, Number(state.totalToDrop) || 1);
-    return Math.max(1, getTotalSelectedCount(state));
-  }
-
-  function getFinishParticipantCount() {
-    if (state.totalToDrop > 0) return Math.max(1, Number(state.totalToDrop) || 1);
-    return Math.max(1, getTotalSelectedCount(state));
+  function getWinnerCountMaxForState() {
+    return getWinnerCountMax(state.totalToDrop, getTotalSelectedCount(state));
   }
 
   function syncFinishTriggerRemaining() {
-    const participantCount = getFinishParticipantCount();
+    const participantCount = getParticipantCount(state.totalToDrop, getTotalSelectedCount(state));
     const winnerCount = clampResultCount(uiState.winnerCount, Math.max(1, participantCount));
     state.finishTriggerRemaining = computeFinishTriggerRemaining(participantCount, winnerCount);
   }
@@ -376,117 +314,22 @@ export function bootstrapGameApp() {
     return state.mode === "playing" && !state.winner;
   }
 
-  function getFinishTensionSnapshot(): FinishTensionSnapshot {
-    const inRun = state.mode === "playing" && !state.winner && !!state.released;
-    if (!inRun) {
-      return { active: false, remaining: 0, progress: 0 };
-    }
-
-    const remaining = Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length);
-    const triggerRemaining = Math.max(1, Number(state.finishTriggerRemaining) || 3);
-    if (remaining <= 0 || remaining > triggerRemaining) {
-      return { active: false, remaining, progress: 0 };
-    }
-
-    let leaderY = Number.NEGATIVE_INFINITY;
-    for (const marble of state.marbles) {
-      if (marble.done) continue;
-      if (marble.y > leaderY) leaderY = marble.y;
-    }
-
-    if (!Number.isFinite(leaderY)) {
-      return { active: false, remaining, progress: 0 };
-    }
-
-    const triggerY = state.board.worldH * FINISH_TENSION_TRIGGER_Y_FRAC;
-    if (leaderY <= triggerY) {
-      return { active: false, remaining, progress: 0 };
-    }
-
-    const progress = clamp(
-      (leaderY - triggerY) / Math.max(1, state.board.worldH - triggerY),
-      0,
-      1
-    );
-    return { active: true, remaining, progress };
-  }
-
-  function resetArrivalTimingTrackers() {
-    finishedAtSecondsByMarbleId.clear();
-    runStartedAtMs = 0;
-    prevFrameAtMs = 0;
-    prevFrameSimT = 0;
-    seenFinishedCount = 0;
-  }
-
-  function beginArrivalTimingTrackers(startedAtMs = performance.now()) {
-    finishedAtSecondsByMarbleId.clear();
-    runStartedAtMs = startedAtMs;
-    prevFrameAtMs = startedAtMs;
-    prevFrameSimT = Number(state.t) || 0;
-    seenFinishedCount = 0;
-  }
-
-  function captureFinishedArrivalTimes(nowMs: number) {
-    if (runStartedAtMs <= 0) return;
-    if (!state.finished.length) {
-      prevFrameAtMs = nowMs;
-      prevFrameSimT = Number(state.t) || 0;
-      return;
-    }
-    if (seenFinishedCount >= state.finished.length) {
-      prevFrameAtMs = nowMs;
-      prevFrameSimT = Number(state.t) || 0;
-      return;
-    }
-
-    const simNow = Number(state.t) || 0;
-    const simDelta = Math.max(0, simNow - prevFrameSimT);
-    const wallDeltaMs = Math.max(0, nowMs - prevFrameAtMs);
-    const fallbackArrivalSeconds = Math.max(0, (nowMs - runStartedAtMs) / 1000);
-
-    for (let index = seenFinishedCount; index < state.finished.length; index++) {
-      const entry = state.finished[index];
-      let arrivalSeconds = fallbackArrivalSeconds;
-
-      if (simDelta > 1e-6 && wallDeltaMs > 0) {
-        const simSinceArrival = Math.max(0, simNow - entry.t);
-        const blend = clamp(simSinceArrival / simDelta, 0, 1);
-        const estimatedArrivalMs = nowMs - wallDeltaMs * blend;
-        arrivalSeconds = Math.max(0, (estimatedArrivalMs - runStartedAtMs) / 1000);
-      }
-
-      finishedAtSecondsByMarbleId.set(entry.marbleId, arrivalSeconds);
-    }
-
-    seenFinishedCount = state.finished.length;
-    prevFrameAtMs = nowMs;
-    prevFrameSimT = simNow;
-  }
-
-  function getArrivalTimeSeconds(entry: FinishedMarble): number {
-    const realSeconds = finishedAtSecondsByMarbleId.get(entry.marbleId);
-    if (typeof realSeconds === "number" && Number.isFinite(realSeconds)) {
-      return Math.max(0, realSeconds);
-    }
-    return Math.max(0, Number(entry.t) || 0);
-  }
-
-  function getFinishTempoMultiplier(baseMultiplier: number): number {
-    const snapshot = getFinishTensionSnapshot();
-    if (!snapshot.active) return baseMultiplier;
-
-    const remainingKey = snapshot.remaining <= 1 ? 1 : snapshot.remaining === 2 ? 2 : 3;
-    const minSlowdown = FINISH_TENSION_SLOWDOWN_BY_REMAINING[remainingKey];
-    const slowdown =
-      FINISH_TENSION_BASE_SLOWDOWN -
-      (FINISH_TENSION_BASE_SLOWDOWN - minSlowdown) * snapshot.progress;
-    const cappedByState = FINISH_TENSION_CAP_BY_REMAINING[remainingKey];
-    return clamp(Math.min(baseMultiplier * slowdown, cappedByState), 0.5, 3);
+  function getFinishTempoMultiplierForState(baseMultiplier: number): number {
+    const snapshot = getFinishTensionSnapshot({
+      mode: state.mode,
+      hasWinner: !!state.winner,
+      released: !!state.released,
+      totalToDrop: Number(state.totalToDrop) || 0,
+      finishedCount: state.finished.length,
+      finishTriggerRemaining: Number(state.finishTriggerRemaining) || 0,
+      marbles: state.marbles,
+      worldH: state.board.worldH,
+    });
+    return getFinishTempoMultiplier(baseMultiplier, snapshot);
   }
 
   function syncLoopSpeed(force = false) {
-    const targetSpeed = getFinishTempoMultiplier(uiState.speedMultiplier);
+    const targetSpeed = getFinishTempoMultiplierForState(uiState.speedMultiplier);
     const nextSpeed = force
       ? targetSpeed
       : appliedLoopSpeed + (targetSpeed - appliedLoopSpeed) * LOOP_SPEED_BLEND_RATIO;
@@ -496,72 +339,22 @@ export function bootstrapGameApp() {
   }
 
   function closeResultModalPresentation() {
-    if (uiState.resultState.phase === "spinning") {
-      uiState.resultState.phase = resolveResultPhase(uiState.resultState.items);
-    }
-    uiState.resultState.open = false;
+    uiState.resultState = closeResultPresentation(uiState.resultState);
   }
 
   function resetResultHistory() {
-    uiState.resultState = {
-      open: false,
-      phase: "idle",
-      requestedCount: uiState.winnerCount,
-      effectiveCount: 0,
-      items: [],
-    };
-  }
-
-  function mapFinishedToResultItems(selected: FinishedMarble[]): ResultUiItem[] {
-    return selected.map((entry, idx) => {
-      const payload = catalogController.getWinnerPayload(entry.ballId);
-      return {
-        rank: idx + 1,
-        ballId: entry.ballId,
-        name: payload?.name || entry.ballId || "알 수 없는 공",
-        img: payload?.img || "",
-        finishedAt: getArrivalTimeSeconds(entry),
-        slot: entry.slot,
-        label: entry.label,
-      };
-    });
-  }
-
-  function resolveResultPhase(items: ResultUiItem[]): "single" | "summary" {
-    return items.length === 1 ? "single" : "summary";
-  }
-
-  function openResultPresentationByCount(items: ResultUiItem[]) {
-    if (!items.length) {
-      uiState.resultState = {
-        open: true,
-        phase: "summary",
-        requestedCount: uiState.winnerCount,
-        effectiveCount: 0,
-        items,
-      };
-      return;
-    }
-
-    uiState.resultState = {
-      open: true,
-      phase: "spinning",
-      requestedCount: uiState.winnerCount,
-      effectiveCount: items.length,
-      items,
-    };
+    uiState.resultState = buildIdleResultState(uiState.winnerCount);
   }
 
   function completeResultSpin() {
-    if (!uiState.resultState.items.length) return;
-    if (uiState.resultState.phase !== "spinning") return;
-    uiState.resultState.phase = resolveResultPhase(uiState.resultState.items);
+    const nextState = completeSpinResultPresentation(uiState.resultState);
+    if (nextState === uiState.resultState) return;
+    uiState.resultState = nextState;
     playWinnerFanfare();
   }
 
   function trackGameStartEvent(restartedFromRun: boolean) {
-    const participantCount =
-      state.totalToDrop > 0 ? Math.max(1, Number(state.totalToDrop) || 1) : Math.max(1, getTotalSelectedCount(state));
+    const participantCount = getParticipantCount(state.totalToDrop, getTotalSelectedCount(state));
     const winnerCount = clampResultCount(uiState.winnerCount, participantCount);
     trackAnalyticsEvent(ANALYTICS_EVENTS.gameStart, {
       participantCount,
@@ -574,8 +367,7 @@ export function bootstrapGameApp() {
   function trackResultOpenEvent(source: "auto" | "manual") {
     const selectedCount = uiState.resultState.items.length;
     if (!selectedCount) return;
-    const participantCount =
-      state.totalToDrop > 0 ? Math.max(1, Number(state.totalToDrop) || 1) : Math.max(1, getTotalSelectedCount(state));
+    const participantCount = getParticipantCount(state.totalToDrop, getTotalSelectedCount(state));
     trackAnalyticsEvent(ANALYTICS_EVENTS.resultOpen, {
       source,
       selectedCount,
@@ -586,10 +378,18 @@ export function bootstrapGameApp() {
 
   function prepareAndOpenResultReveal() {
     if (!state.totalToDrop || !state.finished.length) return;
-    captureFinishedArrivalTimes(performance.now());
+    arrivalTimingTracker.capture({
+      nowMs: performance.now(),
+      simNow: Number(state.t) || 0,
+      finished: state.finished,
+    });
     const selected = selectLastFinishers(state.finished, uiState.winnerCount, state.totalToDrop);
-    const items = mapFinishedToResultItems(selected);
-    openResultPresentationByCount(items);
+    const items = buildResultItems({
+      selected,
+      getWinnerPayload: (ballId) => catalogController.getWinnerPayload(ballId),
+      getArrivalTimeSeconds: (entry) => arrivalTimingTracker.getArrivalSeconds(entry),
+    });
+    uiState.resultState = buildResultStateFromItems(items, uiState.winnerCount);
     trackResultOpenEvent("auto");
   }
 
@@ -628,7 +428,11 @@ export function bootstrapGameApp() {
     syncFinishTriggerRemaining();
     syncLoopSpeed();
     const now = performance.now();
-    captureFinishedArrivalTimes(now);
+    arrivalTimingTracker.capture({
+      nowMs: now,
+      simNow: Number(state.t) || 0,
+      finished: state.finished,
+    });
     const inRun = state.mode === "playing" && !state.winner;
     const remainingToFinish = inRun ? Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length) : -1;
     const winnerT = state.winner ? Number(state.winner.t.toFixed(4)) : -1;
@@ -647,7 +451,7 @@ export function bootstrapGameApp() {
     const remainingToFinish = inRun ? Math.max(0, (Number(state.totalToDrop) || 0) - state.finished.length) : 0;
     const view = renderer.getViewState?.();
     const visibleCatalog = uiState.settingsOpen ? ensureSettingsDraft() : getLiveCatalogView();
-    const winnerCountMax = getWinnerCountMax();
+    const winnerCountMax = getWinnerCountMaxForState();
     const clampedWinnerCount = clampResultCount(uiState.winnerCount, winnerCountMax);
     if (clampedWinnerCount !== uiState.winnerCount) {
       uiState.winnerCount = clampedWinnerCount;
@@ -716,7 +520,7 @@ export function bootstrapGameApp() {
       refreshUi();
     },
     onReset: () => {
-      resetArrivalTimingTrackers();
+      arrivalTimingTracker.reset();
       uiState.winnerCountWasClamped = false;
       resetResultHistory();
       syncLoopSpeed(true);
@@ -738,7 +542,7 @@ export function bootstrapGameApp() {
       uiState.winnerCountWasClamped = false;
       sessionController.handleStartClick();
       if (state.mode === "playing" && state.released) {
-        beginArrivalTimingTrackers();
+        arrivalTimingTracker.begin(performance.now(), Number(state.t) || 0);
         trackGameStartEvent(wasInRun);
       }
       syncLoopSpeed(true);
@@ -764,7 +568,7 @@ export function bootstrapGameApp() {
     setWinnerCount: (nextValue) => {
       if (isBallControlLocked()) return;
       const raw = Math.floor(Number(nextValue) || 1);
-      const max = getWinnerCountMax();
+      const max = getWinnerCountMaxForState();
       const clamped = clampResultCount(raw, max);
       uiState.winnerCount = clamped;
       uiState.winnerCountWasClamped = raw !== clamped;
