@@ -7,6 +7,7 @@
 ## 접속/이벤트 분석
 
 - `@vercel/analytics` 기반으로 페이지 방문(자동)과 핵심 이벤트를 수집합니다.
+- `PostHog`를 선택적으로 함께 붙여 행동 패턴(퍼널/리텐션/코호트) 분석이 가능합니다.
 - 수집 이벤트:
   - `game_start`: 게임 시작
   - `result_open`: 결과 보기 열기(자동/수동)
@@ -51,6 +52,10 @@ cp .env.example .env.local
 - `RESEND_API_KEY`
 - `INQUIRY_FROM_EMAIL`
 - `INQUIRY_ALLOWED_ORIGINS`
+
+선택 값(PostHog):
+- `VITE_POSTHOG_KEY`
+- `VITE_POSTHOG_HOST` (기본값: `https://us.i.posthog.com`)
 
 ## 품질 검증
 
