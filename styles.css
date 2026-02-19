@@ -2916,6 +2916,9 @@ dialog.dialog--settings::backdrop {
 }
 
 .settingsConfirm .twModal__body { display: none; }
+.settingsConfirm.twModal__card {
+  width: min(420px, calc(100vw - 24px));
+}
 .settingsConfirm .twModal__header {
   position: relative;
   justify-content: center;

@@ -482,7 +482,7 @@ export function AppShell() {
           <ModalCard
             className="settingsConfirm"
             size="sm"
-            title="설정을 취소하시겠습니까?"
+            title="설정 변경을 취소하시겠습니까?"
             onClose={() => runAction("cancelDiscardSettings")}
             footer={
               <div className="settingsConfirm__actions">
