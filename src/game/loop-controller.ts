@@ -41,10 +41,8 @@ export function createLoopController<State extends { mode?: string; paused?: boo
 
   let resizeRaf = 0;
   let last = performance.now();
-  let accumulatorMs = 0;
   const fixedStepSec = 1 / 60;
   const fixedStepMs = 1000 / 60;
-  const maxFrameDeltaMs = 240;
   type FrameBudgetPolicy = {
     maxSpeedMultiplier: number;
     maxCatchUpSteps: number;
@@ -90,19 +88,13 @@ export function createLoopController<State extends { mode?: string; paused?: boo
    */
   function tickFixed(ms: number): void {
     const rawMs = Number(ms);
-    const safeMs = Number.isFinite(rawMs) ? Math.max(0, Math.min(maxFrameDeltaMs, rawMs)) : 0;
+    const safeMs = Number.isFinite(rawMs) ? Math.max(0, rawMs) : 0;
     const scaledMs = safeMs * speedMultiplier;
     const frameBudget = getFrameBudgetPolicy();
-    const budgetMs = Math.min(frameBudget.maxElapsedMs, scaledMs);
-    const maxAccumulatorMs = fixedStepMs * frameBudget.maxCatchUpSteps * 3;
-    accumulatorMs = Math.min(accumulatorMs + budgetMs, maxAccumulatorMs);
-
-    let steps = 0;
-    while (accumulatorMs >= fixedStepMs && steps < frameBudget.maxCatchUpSteps) {
-      stepFn(state, fixedStepSec);
-      accumulatorMs -= fixedStepMs;
-      steps += 1;
-    }
+    const maxStepBudgetMs = fixedStepMs * frameBudget.maxCatchUpSteps;
+    const budgetMs = Math.min(maxStepBudgetMs, frameBudget.maxElapsedMs, scaledMs);
+    const steps = Math.max(1, Math.round(budgetMs / fixedStepMs));
+    for (let i = 0; i < steps; i++) stepFn(state, fixedStepSec);
     draw();
     onAfterFrame();
   }
@@ -130,7 +122,6 @@ export function createLoopController<State extends { mode?: string; paused?: boo
       if (state.mode === "playing" && !state.paused) {
         tickFixed(elapsedMs);
       } else {
-        accumulatorMs = 0;
         draw();
       }
       requestAnimationFrame(raf);
