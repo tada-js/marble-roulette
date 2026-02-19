@@ -1924,6 +1924,12 @@ dialog.dialog--winner::backdrop {
   :root {
     --mobile-minimap-bottom: max(10px, env(safe-area-inset-bottom));
     --mobile-minimap-h: min(25vh, 104px);
+    --mobile-hud-menu-top: max(calc(env(safe-area-inset-top) + 132px), 132px);
+    --mobile-hud-menu-size: 40px;
+    --mobile-hud-menu-gap: 10px;
+    --mobile-hud-content-top: calc(
+      var(--mobile-hud-menu-top) + var(--mobile-hud-menu-size) + var(--mobile-hud-menu-gap)
+    );
   }
   .mini {
     pointer-events: auto;
@@ -1932,7 +1938,7 @@ dialog.dialog--winner::backdrop {
     display: flex;
     justify-content: flex-end;
     position: fixed;
-    top: max(calc(env(safe-area-inset-top) + 132px), 132px);
+    top: var(--mobile-hud-menu-top);
     right: max(10px, env(safe-area-inset-right));
     margin: 0;
     z-index: 132;
@@ -1967,6 +1973,7 @@ dialog.dialog--winner::backdrop {
   }
   .hud__content {
     position: fixed;
+    top: var(--mobile-hud-content-top);
     left: 0;
     right: 0;
     bottom: 0;
