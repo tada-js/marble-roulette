@@ -58,10 +58,16 @@ import {
   type ResultPresentationState,
 } from "./result-presentation";
 import type {
+  AudioActions,
+  CatalogSettingsActions,
+  GameConfigActions,
   InquiryField,
   InquiryForm,
+  InquiryActions,
   InquirySubmitResult,
   ResultUiItem,
+  ResultActions,
+  RunActions,
   UiSnapshot,
 } from "./ui-store";
 
@@ -534,7 +540,7 @@ export function bootstrapGameApp() {
     },
   });
 
-  setUiActions({
+  const runActions: RunActions = {
     handleStartClick: () => {
       const wasInRun = state.mode === "playing" && !state.winner;
       closeResultModalPresentation();
@@ -565,6 +571,15 @@ export function bootstrapGameApp() {
       sessionController.togglePause();
       refreshUi();
     },
+    toggleSpeedMode: () => {
+      const next = uiState.speedMultiplier >= 2 ? 1 : 2;
+      uiState.speedMultiplier = next;
+      syncLoopSpeed(true);
+      refreshUi();
+    },
+  };
+
+  const gameConfigActions: GameConfigActions = {
     setWinnerCount: (nextValue) => {
       if (isBallControlLocked()) return;
       const raw = Math.floor(Number(nextValue) || 1);
@@ -580,6 +595,31 @@ export function bootstrapGameApp() {
       uiState.startCaption = nextValue;
       refreshUi();
     },
+    toggleViewLock: (isOn) => {
+      const view = renderer.getViewState?.();
+      if (!view) return;
+      viewState.tailFocusOn = !!isOn;
+      if (viewState.tailFocusOn) renderer.clearCameraOverride?.();
+      else renderer.setCameraOverrideY?.(view.cameraY);
+      refreshUi();
+    },
+    setBallCount: (ballId, nextValue) => {
+      if (isBallControlLocked()) return;
+      setBallCount(state, ballId, nextValue);
+      catalogController.saveCounts(state.counts || {});
+      uiState.winnerCountWasClamped = false;
+      refreshUi();
+    },
+    adjustBallCount: (ballId, delta) => {
+      if (isBallControlLocked()) return;
+      setBallCount(state, ballId, getBallCount(state, ballId) + delta);
+      catalogController.saveCounts(state.counts || {});
+      uiState.winnerCountWasClamped = false;
+      refreshUi();
+    },
+  };
+
+  const catalogSettingsActions: CatalogSettingsActions = {
     openSettings: () => {
       uiState.settingsOpen = true;
       uiState.settingsDirty = false;
@@ -721,13 +761,14 @@ export function bootstrapGameApp() {
       refreshUi();
       return true;
     },
+  };
+
+  const resultActions: ResultActions = {
     openResultModal: () => {
       if (!uiState.resultState.items.length) return false;
       const wasOpen = uiState.resultState.open;
       uiState.resultState.open = true;
-      if (!wasOpen) {
-        trackResultOpenEvent("manual");
-      }
+      if (!wasOpen) trackResultOpenEvent("manual");
       refreshUi();
       return true;
     },
@@ -769,6 +810,9 @@ export function bootstrapGameApp() {
       syncLoopSpeed(true);
       refreshUi();
     },
+  };
+
+  const inquiryActions: InquiryActions = {
     openInquiry: () => {
       uiState.inquiryOpen = true;
       uiState.inquirySubmitting = false;
@@ -836,6 +880,9 @@ export function bootstrapGameApp() {
         refreshUi();
       }
     },
+  };
+
+  const audioActions: AudioActions = {
     toggleBgm: () => {
       audioController.toggle({ autoplay: true });
       refreshUi();
@@ -844,34 +891,15 @@ export function bootstrapGameApp() {
       audioController.setTrack(track, { autoplay: true });
       refreshUi();
     },
-    toggleViewLock: (isOn) => {
-      const v = renderer.getViewState?.();
-      if (!v) return;
-      viewState.tailFocusOn = !!isOn;
-      if (viewState.tailFocusOn) renderer.clearCameraOverride?.();
-      else renderer.setCameraOverrideY?.(v.cameraY);
-      refreshUi();
-    },
-    toggleSpeedMode: () => {
-      const next = uiState.speedMultiplier >= 2 ? 1 : 2;
-      uiState.speedMultiplier = next;
-      syncLoopSpeed(true);
-      refreshUi();
-    },
-    setBallCount: (ballId, nextValue) => {
-      if (isBallControlLocked()) return;
-      setBallCount(state, ballId, nextValue);
-      catalogController.saveCounts(state.counts || {});
-      uiState.winnerCountWasClamped = false;
-      refreshUi();
-    },
-    adjustBallCount: (ballId, delta) => {
-      if (isBallControlLocked()) return;
-      setBallCount(state, ballId, getBallCount(state, ballId) + delta);
-      catalogController.saveCounts(state.counts || {});
-      uiState.winnerCountWasClamped = false;
-      refreshUi();
-    },
+  };
+
+  setUiActions({
+    ...runActions,
+    ...gameConfigActions,
+    ...catalogSettingsActions,
+    ...resultActions,
+    ...inquiryActions,
+    ...audioActions,
   });
 
   mountKeyboardControls({

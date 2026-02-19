@@ -76,13 +76,23 @@ export type UiSnapshot = {
   balls: BallUiModel[];
 };
 
-export type UiActions = {
+export type RunActions = {
   handleStartClick: () => void;
   prepareRestartForCountdown: () => void;
   stopRunNow: () => boolean;
   togglePause: () => void;
+  toggleSpeedMode: () => void;
+};
+
+export type GameConfigActions = {
   setWinnerCount: (nextValue: number) => void;
   setStartCaption: (value: string) => void;
+  toggleViewLock: (isOn: boolean) => void;
+  setBallCount: (ballId: string, nextValue: number) => void;
+  adjustBallCount: (ballId: string, delta: number) => void;
+};
+
+export type CatalogSettingsActions = {
   openSettings: () => void;
   closeSettings: () => void;
   applySettings: () => boolean;
@@ -94,23 +104,35 @@ export type UiActions = {
   restoreDefaultCatalog: () => boolean;
   setCatalogBallName: (ballId: string, name: string) => boolean;
   setCatalogBallImage: (ballId: string, file: File) => Promise<boolean> | boolean;
+};
+
+export type ResultActions = {
   openResultModal: () => boolean;
   closeResultModal: () => void;
   skipResultReveal: () => void;
   completeResultSpin: () => void;
   copyResults: () => Promise<boolean> | boolean;
   restartFromResult: () => void;
+};
+
+export type AudioActions = {
   toggleBgm: () => void;
   setBgmTrack: (track: string) => void;
-  toggleViewLock: (isOn: boolean) => void;
-  setBallCount: (ballId: string, nextValue: number) => void;
-  adjustBallCount: (ballId: string, delta: number) => void;
+};
+
+export type InquiryActions = {
   openInquiry: () => void;
   closeInquiry: () => void;
   setInquiryField: (field: InquiryField, value: string) => boolean;
   submitInquiry: () => Promise<InquirySubmitResult> | InquirySubmitResult;
-  toggleSpeedMode: () => void;
 };
+
+export type UiActions = RunActions &
+  GameConfigActions &
+  CatalogSettingsActions &
+  ResultActions &
+  AudioActions &
+  InquiryActions;
 
 const DEFAULT_SNAPSHOT: UiSnapshot = Object.freeze({
   startDisabled: true,
@@ -158,14 +180,23 @@ const NOOP_VOID = (): void => {};
 const NOOP_FALSE = (): false => false;
 const NOOP_SUBMIT = (): InquirySubmitResult => ({ ok: false, message: "구현되지 않았습니다." });
 
-let snapshot: UiSnapshot = DEFAULT_SNAPSHOT;
-let actions: UiActions = {
+const RUN_NOOPS: RunActions = {
   handleStartClick: NOOP_VOID,
   prepareRestartForCountdown: NOOP_VOID,
   stopRunNow: NOOP_FALSE,
   togglePause: NOOP_VOID,
+  toggleSpeedMode: NOOP_VOID,
+};
+
+const GAME_CONFIG_NOOPS: GameConfigActions = {
   setWinnerCount: NOOP_VOID,
   setStartCaption: NOOP_VOID,
+  toggleViewLock: NOOP_VOID,
+  setBallCount: NOOP_VOID,
+  adjustBallCount: NOOP_VOID,
+};
+
+const CATALOG_SETTINGS_NOOPS: CatalogSettingsActions = {
   openSettings: NOOP_VOID,
   closeSettings: NOOP_VOID,
   applySettings: NOOP_FALSE,
@@ -177,22 +208,37 @@ let actions: UiActions = {
   restoreDefaultCatalog: NOOP_FALSE,
   setCatalogBallName: NOOP_FALSE,
   setCatalogBallImage: NOOP_FALSE,
+};
+
+const RESULT_NOOPS: ResultActions = {
   openResultModal: NOOP_FALSE,
   closeResultModal: NOOP_VOID,
   skipResultReveal: NOOP_VOID,
   completeResultSpin: NOOP_VOID,
   copyResults: NOOP_FALSE,
   restartFromResult: NOOP_VOID,
+};
+
+const AUDIO_NOOPS: AudioActions = {
   toggleBgm: NOOP_VOID,
   setBgmTrack: NOOP_VOID,
-  toggleViewLock: NOOP_VOID,
-  setBallCount: NOOP_VOID,
-  adjustBallCount: NOOP_VOID,
+};
+
+const INQUIRY_NOOPS: InquiryActions = {
   openInquiry: NOOP_VOID,
   closeInquiry: NOOP_VOID,
   setInquiryField: NOOP_FALSE,
   submitInquiry: NOOP_SUBMIT,
-  toggleSpeedMode: NOOP_VOID,
+};
+
+let snapshot: UiSnapshot = DEFAULT_SNAPSHOT;
+let actions: UiActions = {
+  ...RUN_NOOPS,
+  ...GAME_CONFIG_NOOPS,
+  ...CATALOG_SETTINGS_NOOPS,
+  ...RESULT_NOOPS,
+  ...AUDIO_NOOPS,
+  ...INQUIRY_NOOPS,
 };
 
 function notify() {
