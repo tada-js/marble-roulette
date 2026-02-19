@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { Analytics } from "@vercel/analytics/react";
+import { initAnalytics } from "./app/analytics";
 import { bootstrapGameApp } from "./app/create-game-app";
 import { AppShell } from "./ui-react/AppShell";
 import { registerServiceWorker } from "./pwa/register-service-worker";
@@ -24,6 +25,7 @@ function App() {
 
     if (window.__degururuBootstrapped__) return;
     window.__degururuBootstrapped__ = true;
+    initAnalytics();
     const app = bootstrapGameApp();
 
     return () => {
