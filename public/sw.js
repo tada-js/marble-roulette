@@ -1,4 +1,4 @@
-const SW_VERSION = "degururu-pwa-v3";
+const SW_VERSION = "degururu-pwa-v4";
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 const PRECACHE_URLS = [
@@ -51,7 +51,12 @@ async function networkFirst(request) {
     const response = await fetch(request);
     if (response && response.ok) {
       const cache = await caches.open(RUNTIME_CACHE);
-      cache.put(request, response.clone()).catch(() => undefined);
+      try {
+        const cacheable = response.clone();
+        cache.put(request, cacheable).catch(() => undefined);
+      } catch (_cloneError) {
+        // Ignore clone failures for non-cloneable/consumed responses.
+      }
     }
     return response;
   } catch (_err) {
@@ -66,7 +71,15 @@ async function staleWhileRevalidate(request) {
   const fetchPromise = fetch(request)
     .then((response) => {
       if (response && response.ok) {
-        caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
+        try {
+          const cacheable = response.clone();
+          caches
+            .open(RUNTIME_CACHE)
+            .then((cache) => cache.put(request, cacheable))
+            .catch(() => undefined);
+        } catch (_cloneError) {
+          // Ignore clone failures for non-cloneable/consumed responses.
+        }
       }
       return response;
     })
