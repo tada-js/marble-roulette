@@ -259,7 +259,7 @@ export function ResultModal({
               {spinPlan.items.map((item) => (
                 <div className="resultSpinView__item" key={item.key}>
                   <div className="resultSpinView__thumb">
-                    <img src={item.img || "data:,"} alt={item.name} width={44} height={44} loading="lazy" decoding="async" />
+                    <img src={item.img || "data:,"} alt={item.name} />
                   </div>
                   <div className="resultSpinView__name">{item.name}</div>
                 </div>
@@ -277,7 +277,7 @@ export function ResultModal({
       return (
         <div className="resultSingleCard">
           <div className="resultSingleCard__thumb">
-            <img src={finalWinner.img || "data:,"} alt={finalWinner.name} width={128} height={128} decoding="async" />
+            <img src={finalWinner.img || "data:,"} alt={finalWinner.name} />
           </div>
           <div className="resultSingleCard__name">{finalWinner.name}</div>
           <div className="resultSingleCard__time">{formatArrivalTime(finalWinner.finishedAt)}</div>

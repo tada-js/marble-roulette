@@ -55,14 +55,5 @@ export default defineConfig({
   build: {
     outDir: "dist-vite",
     sourcemap: true,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules")) return "vendor";
-          if (id.includes("/ui-react/components/modals/ResultModal")) return "result-modal";
-          return undefined;
-        },
-      },
-    },
   },
 });

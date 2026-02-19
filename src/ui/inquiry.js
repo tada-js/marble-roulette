@@ -1,7 +1,7 @@
+import Toastify from "toastify-js";
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const XSS_RE = /<[^>]*>|javascript:|on\w+\s*=|data:text\/html/i;
-const TOAST_STACK_ID = "dg-toast-stack";
-const TOAST_HIDE_TRANSITION_MS = 180;
 
 export const INQUIRY_LIMITS = Object.freeze({
   email: 120,
@@ -99,74 +99,17 @@ export async function submitInquiry(payload, opts = {}) {
  * @param {number} [durationMs]
  */
 export function showInquiryToast(message, type = "success", durationMs = 2200) {
-  if (typeof document === "undefined") return;
-  const safeMessage = String(message || "").trim();
-  if (!safeMessage) return;
-  const stack = ensureToastStack();
-  const toast = document.createElement("div");
+  const makeToast = typeof Toastify === "function" ? Toastify : null;
+  if (!makeToast) return;
   const isError = type === "error";
-  toast.className = `dg-toast ${isError ? "dg-toast--error" : "dg-toast--success"}`;
-  toast.textContent = safeMessage;
-  toast.setAttribute("role", "status");
-  toast.setAttribute("aria-live", "polite");
-  stack.appendChild(toast);
-
-  window.setTimeout(() => {
-    toast.classList.add("is-visible");
-  }, 0);
-
-  const dismiss = () => {
-    toast.classList.remove("is-visible");
-    window.setTimeout(() => {
-      toast.remove();
-      cleanupToastStack(stack);
-    }, TOAST_HIDE_TRANSITION_MS);
-  };
-
-  const timeoutMs = Math.max(900, Number(durationMs) || 2200);
-  const dismissTimer = window.setTimeout(dismiss, timeoutMs);
-  toast.addEventListener(
-    "click",
-    () => {
-      window.clearTimeout(dismissTimer);
-      dismiss();
-    },
-    { once: true }
-  );
-
-  trimToastStack(stack, 4);
-}
-
-/**
- * @returns {HTMLElement}
- */
-function ensureToastStack() {
-  const existing = document.getElementById(TOAST_STACK_ID);
-  if (existing instanceof HTMLElement) return existing;
-  const stack = document.createElement("div");
-  stack.id = TOAST_STACK_ID;
-  stack.className = "dg-toastStack";
-  document.body.appendChild(stack);
-  return stack;
-}
-
-/**
- * @param {HTMLElement} stack
- * @param {number} maxCount
- */
-function trimToastStack(stack, maxCount) {
-  const overflow = Math.max(0, stack.children.length - Math.max(1, maxCount | 0));
-  if (!overflow) return;
-  for (let i = 0; i < overflow; i++) {
-    const child = stack.children[0];
-    if (child instanceof HTMLElement) child.remove();
-  }
-}
-
-/**
- * @param {HTMLElement} stack
- */
-function cleanupToastStack(stack) {
-  if (stack.children.length) return;
-  stack.remove();
+  makeToast({
+    text: message,
+    duration: durationMs,
+    gravity: "bottom",
+    position: "right",
+    stopOnFocus: true,
+    close: false,
+    className: `dg-toast ${isError ? "dg-toast--error" : "dg-toast--success"}`,
+    offset: { x: 18, y: 18 },
+  }).showToast();
 }

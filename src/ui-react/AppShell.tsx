@@ -1,7 +1,5 @@
 import {
-  Suspense,
   useEffect,
-  lazy,
   useRef,
   useState,
   useSyncExternalStore,
@@ -21,13 +19,10 @@ import { Button, IconButton } from "./components/Button";
 import { GameCanvasStage } from "./components/GameCanvasStage";
 import { LeftPanel } from "./components/LeftPanel";
 import { ModalCard } from "./components/Modal";
+import { ResultModal } from "./components/modals/ResultModal";
 import { TopBar } from "./components/TopBar";
 
 const CATALOG_MAX = 15;
-const ResultModalLazy = lazy(async () => {
-  const module = await import("./components/modals/ResultModal");
-  return { default: module.ResultModal };
-});
 
 function useUiSnapshot() {
   return useSyncExternalStore(subscribeUi, getUiSnapshot, getUiSnapshot);
@@ -411,7 +406,7 @@ export function AppShell() {
                     <div className="twItem__topRow">
                       <div className="twItem__primaryRow">
                         <div className="twItem__thumb">
-                          <img alt={ball.name} src={ball.imageDataUrl} width={64} height={64} loading="lazy" decoding="async" />
+                          <img alt={ball.name} src={ball.imageDataUrl} />
                         </div>
                         <div className="field twItem__nameField">
                           <label htmlFor={`ball-name-${ball.id}`}>이름</label>
@@ -631,25 +626,15 @@ export function AppShell() {
         }}
       >
         <form className="twModal" id="result-form" onSubmit={(event) => event.preventDefault()}>
-          {ui.resultState.open ? (
-            <Suspense
-              fallback={
-                <ModalCard size="md" title="결과 보기" onClose={() => runAction("closeResultModal")}>
-                  <div className="resultRevealWaiting">결과를 준비하고 있어요.</div>
-                </ModalCard>
-              }
-            >
-              <ResultModalLazy
-                state={ui.resultState}
-                rollCandidates={resultRollCandidates}
-                onClose={() => runAction("closeResultModal")}
-                onSkip={() => runAction("skipResultReveal")}
-                onSpinDone={() => runAction("completeResultSpin")}
-                onCopy={() => runAction("copyResults")}
-                onRestart={handleResultRestart}
-              />
-            </Suspense>
-          ) : null}
+          <ResultModal
+            state={ui.resultState}
+            rollCandidates={resultRollCandidates}
+            onClose={() => runAction("closeResultModal")}
+            onSkip={() => runAction("skipResultReveal")}
+            onSpinDone={() => runAction("completeResultSpin")}
+            onCopy={() => runAction("copyResults")}
+            onRestart={handleResultRestart}
+          />
         </form>
       </dialog>
     </>

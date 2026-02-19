@@ -8,6 +8,7 @@ const PRECACHE_URLS = [
   "/manifest.webmanifest",
   "/offline.html",
   "/favicon.ico",
+  "/assets/og-image.png",
   "/assets/pwa-192.png",
   "/assets/pwa-512.png",
 ];

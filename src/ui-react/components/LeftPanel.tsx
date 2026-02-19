@@ -547,14 +547,7 @@ export function LeftPanel(props: LeftPanelProps) {
                       </button>
 
                       <div className="participantRow__thumb">
-                        <img
-                          alt={ball.name}
-                          src={ball.imageDataUrl}
-                          width={40}
-                          height={40}
-                          loading="lazy"
-                          decoding="async"
-                        />
+                        <img alt={ball.name} src={ball.imageDataUrl} />
                       </div>
 
                       <div className="participantRow__qty">
