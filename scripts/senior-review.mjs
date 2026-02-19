@@ -47,6 +47,51 @@ function runGit(args) {
   }).trim();
 }
 
+function tryRunGit(args) {
+  try {
+    return {
+      ok: true,
+      out: runGit(args),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      out: "",
+      error,
+    };
+  }
+}
+
+function fetchBaseRef(depth) {
+  try {
+    execFileSync("git", ["fetch", "--no-tags", `--depth=${depth}`, "origin", BASE_REF], {
+      cwd: REPO_ROOT,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function unshallowBaseRef() {
+  try {
+    execFileSync("git", ["fetch", "--no-tags", "--unshallow", "origin", BASE_REF], {
+      cwd: REPO_ROOT,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function noMergeBaseError(error) {
+  const stderr = String(error?.stderr || "");
+  const message = String(error?.message || "");
+  return /no merge base/i.test(stderr) || /no merge base/i.test(message);
+}
+
 function lineOf(text, idx) {
   let line = 1;
   for (let i = 0; i < idx; i++) {
@@ -62,16 +107,23 @@ function shouldScan(rel) {
 }
 
 function collectChangedFiles() {
-  try {
-    execFileSync("git", ["fetch", "--no-tags", "--depth=1", "origin", BASE_REF], {
-      cwd: REPO_ROOT,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  } catch {
-    // ignore fetch errors and try with whatever refs are available.
+  fetchBaseRef(200);
+
+  let diff = tryRunGit(["diff", "--name-only", "--diff-filter=ACMRTUXB", `origin/${BASE_REF}...HEAD`]);
+  if (!diff.ok && noMergeBaseError(diff.error)) {
+    // Fallback for shallow clones where merge-base is not available yet.
+    unshallowBaseRef();
+    fetchBaseRef(2000);
+    diff = tryRunGit(["diff", "--name-only", "--diff-filter=ACMRTUXB", `origin/${BASE_REF}...HEAD`]);
   }
 
-  const out = runGit(["diff", "--name-only", "--diff-filter=ACMRTUXB", `origin/${BASE_REF}...HEAD`]);
+  if (!diff.ok) {
+    diff = tryRunGit(["diff", "--name-only", "--diff-filter=ACMRTUXB", `origin/${BASE_REF}..HEAD`]);
+  }
+  if (!diff.ok) {
+    diff = tryRunGit(["diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD~1..HEAD"]);
+  }
+  const out = diff.ok ? diff.out : "";
   return out
     .split("\n")
     .map((line) => line.trim())

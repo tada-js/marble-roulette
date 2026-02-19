@@ -6,7 +6,7 @@
 
 ## 게임 한눈에 보기
 
-![데구르르 플레이 이미지](public/assets/play-image.png)
+![데구르르 플레이 이미지](public/assets/play-img.png)
 
 ## How To Play
 
