@@ -49,17 +49,17 @@ export function createLoopController<State extends { mode?: string; paused?: boo
     maxElapsedMs: number;
   };
   const defaultFrameBudgetPolicies: FrameBudgetPolicy[] = [
-    { maxSpeedMultiplier: 1.01, maxCatchUpSteps: 2, maxElapsedMs: 40 },
-    { maxSpeedMultiplier: 1.5, maxCatchUpSteps: 3, maxElapsedMs: 56 },
-    { maxSpeedMultiplier: 2.1, maxCatchUpSteps: 4, maxElapsedMs: 72 },
-    { maxSpeedMultiplier: Number.POSITIVE_INFINITY, maxCatchUpSteps: 5, maxElapsedMs: 88 },
+    { maxSpeedMultiplier: 1.01, maxCatchUpSteps: 4, maxElapsedMs: 64 },
+    { maxSpeedMultiplier: 1.5, maxCatchUpSteps: 5, maxElapsedMs: 84 },
+    { maxSpeedMultiplier: 2.1, maxCatchUpSteps: 6, maxElapsedMs: 104 },
+    { maxSpeedMultiplier: Number.POSITIVE_INFINITY, maxCatchUpSteps: 7, maxElapsedMs: 124 },
   ];
   const coarsePointerFrameBudgetPolicies: FrameBudgetPolicy[] = [
-    // Mobile/coarse pointer: allow more catch-up so gameplay speed stays closer to desktop.
-    { maxSpeedMultiplier: 1.01, maxCatchUpSteps: 4, maxElapsedMs: 72 },
-    { maxSpeedMultiplier: 1.5, maxCatchUpSteps: 5, maxElapsedMs: 88 },
-    { maxSpeedMultiplier: 2.1, maxCatchUpSteps: 6, maxElapsedMs: 104 },
-    { maxSpeedMultiplier: Number.POSITIVE_INFINITY, maxCatchUpSteps: 7, maxElapsedMs: 120 },
+    // Real devices can drop to low FPS; keep larger catch-up budget so game time does not lag.
+    { maxSpeedMultiplier: 1.01, maxCatchUpSteps: 8, maxElapsedMs: 136 },
+    { maxSpeedMultiplier: 1.5, maxCatchUpSteps: 9, maxElapsedMs: 156 },
+    { maxSpeedMultiplier: 2.1, maxCatchUpSteps: 10, maxElapsedMs: 176 },
+    { maxSpeedMultiplier: Number.POSITIVE_INFINITY, maxCatchUpSteps: 11, maxElapsedMs: 196 },
   ];
   const isCoarsePointerViewport = Boolean(window.matchMedia?.("(pointer: coarse)")?.matches);
   const frameBudgetPolicies = isCoarsePointerViewport

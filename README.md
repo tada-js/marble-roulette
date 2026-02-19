@@ -15,12 +15,52 @@
 3. `게임 시작`으로 전체 공을 동시에 투하합니다.
 4. 완료 후 `결과 보기`에서 선택 결과를 확인/복사합니다.
 
-## 핵심 UX 포인트
+## 성능 최적화
 
-- 핀볼 보드 기반의 물리 시뮬레이션
-- 피니시 구간 클로즈업/템포 연출
-- 결과 발표 모달(스핀 연출 + 요약 목록)
-- 모바일/데스크톱 반응형 UI
+<details>
+<summary>2026-02</summary>
+
+목표:
+- 모바일에서 공 밀집 구간 버벅임 완화
+- 모바일에서 체감 속도 저하(느린 정속) 해소
+- 네온/배경 아이덴티티는 유지
+
+아키텍처 변화:
+
+```mermaid
+flowchart LR
+  subgraph Before["Before"]
+    B1["requestAnimationFrame"] --> B2["elapsed 기반 단발 step 계산"]
+    B3["모바일 저FPS"] --> B4["프레임당 보정 상한에 걸려 시간 유실"]
+    B5["이미지 렌더"] --> B6["기본 img 속성"]
+  end
+
+  subgraph After["After"]
+    A1["requestAnimationFrame"] --> A2["Accumulator fixed-step loop"]
+    A2 --> A3["남은 시간 누적 + 다중 catch-up step"]
+    A4["모바일 저FPS"] --> A5["시간 유실 완화, 데스크톱 체감에 근접"]
+    A6["이미지 렌더"] --> A7["width/height + lazy + async decoding"]
+  end
+```
+
+적용 항목:
+- 참가자/결과 이미지에 `width/height`, `loading`, `decoding` 힌트 적용
+- 루프 컨트롤러를 누적형 고정 스텝(Accumulator)으로 변경
+- 모바일 환경의 catch-up 예산을 확대해 실제 기기에서 시간 지연을 완화
+- 네온사인/배경 시각 효과는 기존 스타일 유지
+
+최근 빌드 결과(`npm run build:vite`):
+- `assets/index-*.js`: 331.39 kB (gzip 105.35 kB)
+- `assets/index-*.css`: 64.63 kB (gzip 12.97 kB)
+
+검증:
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build:vite`
+- `npm run security`
+
+</details>
 
 ## 성능 최적화 리포트 (2026-02)
 
