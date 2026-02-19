@@ -1,3 +1,5 @@
+import { t } from "../i18n/runtime.ts";
+
 /**
  * Mount minimap rendering and camera interaction controls.
  *
@@ -98,8 +100,8 @@ export function mountMinimapController(opts) {
     }
 
     if (minimapHintEl) {
-      if (state.mode !== "playing") minimapHintEl.textContent = "시작 전에도 미니맵으로 맵을 둘러볼 수 있어요.";
-      else minimapHintEl.textContent = "토글 OFF: 자유 시점(미니맵으로 이동)\n토글 ON: 후미 공 자동 추적";
+      if (state.mode !== "playing") minimapHintEl.textContent = t("minimap.hint.idle");
+      else minimapHintEl.textContent = t("minimap.hint.playing");
     }
   }
 

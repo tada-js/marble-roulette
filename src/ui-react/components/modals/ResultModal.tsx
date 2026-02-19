@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ResultUiState } from "../../../app/ui-store";
+import { useI18n } from "../../../i18n/react";
 import { Button } from "../Button";
 import { ModalCard } from "../Modal";
 
@@ -73,6 +74,7 @@ export function ResultModal({
   onCopy,
   onRestart,
 }: ResultModalProps) {
+  const { t } = useI18n();
   const reelViewportRef = useRef<HTMLDivElement | null>(null);
   const reelTrackRef = useRef<HTMLDivElement | null>(null);
   const skipButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -239,8 +241,8 @@ export function ResultModal({
     return () => window.clearTimeout(timer);
   }, [state.open, isSpinning, isSingle, isSummary]);
 
-  const resultCountTitle = `당첨자 목록(${state.items.length})`;
-  const title = isSpinning ? "결과 발표 대기중" : resultCountTitle;
+  const resultCountTitle = t("result.listTitle", { count: state.items.length });
+  const title = isSpinning ? t("result.waitingTitle") : resultCountTitle;
   const viewKind = getResultViewKind({
     isSpinning,
     spinPlan,
@@ -253,7 +255,7 @@ export function ResultModal({
     if (viewKind === "spinning" && spinPlan) {
       return (
         <div className="resultSpinView">
-          <div className="resultSpinView__status">결과 발표 대기중</div>
+          <div className="resultSpinView__status">{t("result.waitingTitle")}</div>
           <div className="resultSpinView__viewport" ref={reelViewportRef} aria-live="polite">
             <div className="resultSpinView__track" ref={reelTrackRef}>
               {spinPlan.items.map((item) => (
@@ -299,7 +301,7 @@ export function ResultModal({
       );
     }
 
-    return <div className="resultRevealWaiting">결과를 준비하고 있어요.</div>;
+    return <div className="resultRevealWaiting">{t("result.waitingBody")}</div>;
   };
 
   const renderFooter = () => {
@@ -307,7 +309,7 @@ export function ResultModal({
       return (
         <div className="resultModal__actions">
           <Button variant="ghost" type="button" buttonRef={skipButtonRef} onClick={onSkip}>
-            바로 보기
+            {t("result.skipReveal")}
           </Button>
         </div>
       );
@@ -316,13 +318,13 @@ export function ResultModal({
     return (
       <div className="resultModal__actions">
         <Button variant="ghost" className="resultModal__copy" type="button" onClick={onCopy}>
-          결과 복사
+          {t("result.copy")}
         </Button>
         <Button variant="accent" type="button" buttonRef={restartButtonRef} onClick={onRestart}>
-          다시 시작
+          {t("result.restart")}
         </Button>
         <Button variant="ghost" type="button" onClick={onClose}>
-          닫기
+          {t("common.close")}
         </Button>
       </div>
     );

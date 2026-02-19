@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-page="offline">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -38,6 +38,12 @@
         box-shadow: 0 24px 72px rgba(0, 0, 0, 0.42);
         padding: 20px;
       }
+      .offlineTop {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
       .offlineTitle {
         margin: 0;
         font-size: 20px;
@@ -68,17 +74,45 @@
       .offlineButton:active {
         transform: translateY(1px);
       }
+      .langSwitch {
+        display: inline-flex;
+        gap: 4px;
+      }
+      .langSwitch__btn {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+        color: #eaf1ff;
+        border-radius: 8px;
+        height: 28px;
+        min-width: 40px;
+        padding: 0 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .langSwitch__btn.is-active {
+        border-color: rgba(69, 243, 195, 0.6);
+        background: rgba(69, 243, 195, 0.2);
+      }
     </style>
   </head>
   <body>
     <main class="offlineWrap">
       <section class="offlineCard" role="status" aria-live="polite">
-        <h1 class="offlineTitle">오프라인 상태입니다</h1>
-        <p class="offlineDesc">네트워크 연결 후 다시 시도해 주세요. 연결이 복구되면 게임을 바로 이어서 사용할 수 있어요.</p>
+        <div class="offlineTop">
+          <h1 class="offlineTitle" data-i18n="title">오프라인 상태입니다</h1>
+          <div class="langSwitch" aria-label="Language switch">
+            <button type="button" class="langSwitch__btn" data-lang-option="ko">KO</button>
+            <button type="button" class="langSwitch__btn" data-lang-option="en">EN</button>
+          </div>
+        </div>
+        <p class="offlineDesc" data-i18n="desc">
+          네트워크 연결 후 다시 시도해 주세요. 연결이 복구되면 게임을 바로 이어서 사용할 수 있어요.
+        </p>
         <div class="offlineActions">
-          <button class="offlineButton" type="button" onclick="window.location.reload()">다시 시도</button>
+          <button class="offlineButton" type="button" onclick="window.location.reload()" data-i18n="retry">다시 시도</button>
         </div>
       </section>
     </main>
+    <script src="/static-page-i18n.js"></script>
   </body>
 </html>

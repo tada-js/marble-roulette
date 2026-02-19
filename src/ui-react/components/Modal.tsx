@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useI18n } from "../../i18n/react";
 import { IconButton } from "./Button";
 
 type ModalCardSize = "sm" | "md" | "lg" | "xl";
@@ -25,6 +26,7 @@ type ModalCardProps = {
  * Reusable modal card shell for header/body/footer consistency.
  */
 export function ModalCard(props: ModalCardProps) {
+  const { t } = useI18n();
   const {
     title,
     description = "",
@@ -32,7 +34,7 @@ export function ModalCard(props: ModalCardProps) {
     children,
     footer,
     className = "",
-    closeLabel = "닫기",
+    closeLabel = t("common.close"),
     size = "lg",
   } = props;
 

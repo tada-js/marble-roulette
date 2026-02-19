@@ -1,4 +1,5 @@
 import { useEffect, useState, type DragEvent, type TouchEvent } from "react";
+import { useI18n } from "../../i18n/react";
 import { Button, IconButton } from "./Button";
 import { AppIcon } from "./Icons";
 
@@ -49,6 +50,7 @@ type LeftPanelProps = {
 };
 
 export function LeftPanel(props: LeftPanelProps) {
+  const { t } = useI18n();
   const {
     viewLockChecked,
     viewLockDisabled,
@@ -84,9 +86,9 @@ export function LeftPanel(props: LeftPanelProps) {
   const showResultOption = !isMobileViewport || resultFoldOpen;
   const showStartCaption = !isMobileViewport || captionFoldOpen;
   const showMinimapFocusIcon = isMobileViewport;
-  const mobileHudFoldAriaLabel = mobileHudFoldOpen ? "메뉴 닫기" : "메뉴 열기";
-  const participantTitle = `참가자 목록(${totalParticipants})`;
-  const participantFoldAriaLabel = showParticipants ? "참가자 목록 접기" : "참가자 목록 펼치기";
+  const mobileHudFoldAriaLabel = mobileHudFoldOpen ? t("left.menuClose") : t("left.menuOpen");
+  const participantTitle = t("left.participantListTitle", { count: totalParticipants });
+  const participantFoldAriaLabel = showParticipants ? t("left.participantFoldClose") : t("left.participantFoldOpen");
   const participantFoldCaretClassName = ["mobileFold__caret", showParticipants ? "is-open" : ""]
     .filter(Boolean)
     .join(" ");
@@ -209,7 +211,7 @@ export function LeftPanel(props: LeftPanelProps) {
         <div className="panelCard__title">{participantTitle}</div>
         <div className="panelCard__headerActions">
           <Button id="settings-btn" variant="ghost" size="sm" disabled={isLocked} onClick={onOpenSettings}>
-            참가자 설정
+            {t("left.participantSettings")}
           </Button>
         </div>
       </div>
@@ -262,7 +264,7 @@ export function LeftPanel(props: LeftPanelProps) {
         <button
           type="button"
           className="hud__mobileScrim"
-          aria-label="메뉴 닫기"
+          aria-label={t("left.menuClose")}
           aria-hidden={mobileHudFoldOpen ? undefined : "true"}
           tabIndex={mobileHudFoldOpen ? 0 : -1}
           onClick={() => setMobileHudFoldOpen(false)}
@@ -271,10 +273,10 @@ export function LeftPanel(props: LeftPanelProps) {
       <div className="mini">
         <div className="mini__row">
           <div className="mini__title" id="minimap-title">
-            미니맵
+            {t("left.minimap")}
           </div>
           <label className="switch tooltip" data-tip={viewLockTooltip} aria-label={viewLockTooltip}>
-            <span className="switch__label">시점 고정</span>
+            <span className="switch__label">{t("left.viewLock")}</span>
             <input
               id="view-lock"
               className="switch__input"
@@ -293,9 +295,9 @@ export function LeftPanel(props: LeftPanelProps) {
         {showMinimapFocusIcon && (
           <IconButton
             className={`mini__refocus ${viewLockChecked ? "is-on" : ""}`}
-            ariaLabel={viewLockChecked ? "시점 고정 해제" : "시점 고정 켜기"}
+            ariaLabel={viewLockChecked ? t("left.viewLockDisable") : t("left.viewLockEnable")}
             ariaPressed={viewLockChecked}
-            title={viewLockChecked ? "시점 고정 ON" : "시점 고정 OFF"}
+            title={viewLockChecked ? t("left.viewLockOn") : t("left.viewLockOff")}
             disabled={viewLockDisabled}
             onClick={() => onToggleViewLock(!viewLockChecked)}
           >
@@ -303,7 +305,7 @@ export function LeftPanel(props: LeftPanelProps) {
           </IconButton>
         )}
         <div className="mini__hint" id="minimap-hint">
-          미니맵을 클릭해 이동하고, 시점 고정을 켜면 자동 추적으로 돌아갑니다.
+          {t("left.minimapHint")}
         </div>
       </div>
 
@@ -327,13 +329,13 @@ export function LeftPanel(props: LeftPanelProps) {
           <div className="hudMobileSheet__header">
             <div className="hudMobileSheet__handle" aria-hidden="true"></div>
             <div className="hudMobileSheet__titleRow">
-              <div className="hudMobileSheet__titleWrap">
-                <div className="hudMobileSheet__title">게임 설정</div>
+                <div className="hudMobileSheet__titleWrap">
+                <div className="hudMobileSheet__title">{t("left.gameSettings")}</div>
               </div>
               <IconButton
                 className="hudMobileSheet__closeBtn"
-                ariaLabel="메뉴 닫기"
-                title="메뉴 닫기"
+                ariaLabel={t("left.menuClose")}
+                title={t("left.menuClose")}
                 onClick={() => setMobileHudFoldOpen(false)}
               >
                 <span aria-hidden="true">✕</span>
@@ -347,12 +349,12 @@ export function LeftPanel(props: LeftPanelProps) {
             <button
               type="button"
               className="mobileFold__toggle"
-              aria-label={showStartCaption ? "시작지점 문구 접기" : "시작지점 문구 펼치기"}
+              aria-label={showStartCaption ? t("left.startCaptionFoldClose") : t("left.startCaptionFoldOpen")}
               aria-expanded={showStartCaption}
               aria-controls="start-caption-body"
               onClick={() => setCaptionFoldOpen((prev) => !prev)}
             >
-              <span className="mobileFold__label">시작지점 문구</span>
+              <span className="mobileFold__label">{t("left.startCaption")}</span>
               <span className="mobileFold__meta">{`${startCaptionLength}/${START_CAPTION_MAX}`}</span>
               <span className={`mobileFold__caret ${showStartCaption ? "is-open" : ""}`} aria-hidden="true">
                 ▾
@@ -364,7 +366,7 @@ export function LeftPanel(props: LeftPanelProps) {
               {!isMobileViewport ? (
                 <div className="startCaption__labelRow">
                   <label className="startCaption__label" htmlFor="start-caption-input">
-                    시작지점 문구
+                    {t("left.startCaption")}
                   </label>
                   <span className="startCaption__count">{`${startCaptionLength}/${START_CAPTION_MAX}`}</span>
                 </div>
@@ -374,13 +376,15 @@ export function LeftPanel(props: LeftPanelProps) {
                 className="startCaption__input"
                 type="text"
                 maxLength={START_CAPTION_MAX}
-                placeholder="예) 두근두근 당첨자는 누구일까요?"
+                placeholder={t("left.startCaptionPlaceholder")}
                 value={startCaption}
                 disabled={isLocked}
                 onChange={(event) => onSetStartCaption(event.currentTarget.value)}
               />
               <div className="startCaption__hint">
-                {isLocked ? "진행 중에는 변경할 수 없어요." : "띄어쓰기 포함 최대 28자, 시작지점 상단에 표시됩니다."}
+                {isLocked
+                  ? t("left.startCaptionLocked")
+                  : t("left.startCaptionHint", { max: START_CAPTION_MAX })}
               </div>
             </div>
           )}
@@ -391,12 +395,12 @@ export function LeftPanel(props: LeftPanelProps) {
             <button
               type="button"
               className="mobileFold__toggle"
-              aria-label={showResultOption ? "당첨자 수 접기" : "당첨자 수 펼치기"}
+              aria-label={showResultOption ? t("left.winnerCountFoldClose") : t("left.winnerCountFoldOpen")}
               aria-expanded={showResultOption}
               aria-controls="result-option-body"
               onClick={() => setResultFoldOpen((prev) => !prev)}
             >
-              <span className="mobileFold__label">당첨자 수</span>
+              <span className="mobileFold__label">{t("left.winnerCount")}</span>
               <span className={`mobileFold__caret ${showResultOption ? "is-open" : ""}`} aria-hidden="true">
                 ▾
               </span>
@@ -408,10 +412,10 @@ export function LeftPanel(props: LeftPanelProps) {
                 className={`resultOption__row ${isMobileViewport ? "resultOption__row--mobile" : ""}`}
                 id="result-option-body"
               >
-                {!isMobileViewport ? <div className="resultOption__label">당첨자 수</div> : null}
+                {!isMobileViewport ? <div className="resultOption__label">{t("left.winnerCount")}</div> : null}
                 <div
                   className={`resultOption__viewWrap ${resultDisabled ? "tooltip" : ""}`}
-                  data-tip={resultDisabled ? "결과 보기는 게임 종료 이후 확인할 수 있습니다." : undefined}
+                  data-tip={resultDisabled ? t("left.resultDisabledTip") : undefined}
                 >
                   <Button
                     id="winner-btn"
@@ -421,7 +425,7 @@ export function LeftPanel(props: LeftPanelProps) {
                     disabled={resultDisabled}
                     onClick={onOpenResult}
                   >
-                    결과 보기
+                    {t("left.openResult")}
                   </Button>
                 </div>
               </div>
@@ -457,9 +461,9 @@ export function LeftPanel(props: LeftPanelProps) {
                   </Button>
                 </div>
               </div>
-              <div className="resultOption__helper">가장 늦게 도착한 순서대로 결과를 공개합니다.</div>
+              <div className="resultOption__helper">{t("left.resultHelper")}</div>
               {winnerCountWasClamped && (
-                <div className="resultOption__hint">참가자 수를 넘어 자동으로 참가자 수로 맞춰졌습니다.</div>
+                <div className="resultOption__hint">{t("left.resultClamped")}</div>
               )}
             </>
           )}
@@ -494,7 +498,7 @@ export function LeftPanel(props: LeftPanelProps) {
                 disabled={isLocked}
                 onClick={onOpenSettings}
               >
-                참가자 설정
+                {t("left.participantSettings")}
               </Button>
             </div>
           )}
@@ -525,8 +529,8 @@ export function LeftPanel(props: LeftPanelProps) {
                       <button
                         type="button"
                         className="participantRow__dragHandle"
-                        aria-label={`${ball.name} 순서 이동`}
-                        title={isLocked ? "진행 중에는 순서를 변경할 수 없어요." : "드래그해서 순서를 변경하세요."}
+                        aria-label={t("left.reorderAria", { name: ball.name })}
+                        title={isLocked ? t("left.reorderLocked") : t("left.reorderHint")}
                         draggable={!isLocked}
                         disabled={isLocked}
                         onDragStart={(event) => handleDragStart(ball.id, event)}
@@ -567,7 +571,7 @@ export function LeftPanel(props: LeftPanelProps) {
                           max="99"
                           step="1"
                           value={String(ball.count)}
-                          aria-label={`${ball.name} 개수`}
+                          aria-label={t("left.countAria", { name: ball.name })}
                           disabled={ball.locked}
                           onChange={(event) => onSetBallCount(ball.id, Number(event.currentTarget.value))}
                         />
@@ -587,7 +591,7 @@ export function LeftPanel(props: LeftPanelProps) {
               {isLocked && (
                 <div className="participantList__lockOverlay" role="status" aria-live="polite">
                   <AppIcon name="lock" />
-                  <span>진행 중에는 편집이 잠겨요</span>
+                  <span>{t("left.editLocked")}</span>
                 </div>
               )}
             </div>

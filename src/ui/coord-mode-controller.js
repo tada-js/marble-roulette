@@ -1,3 +1,5 @@
+import { t } from "../i18n/runtime.ts";
+
 /**
  * Mount secret coordinate mode controls for board canvas.
  *
@@ -71,7 +73,7 @@ export function mountCoordModeController(opts) {
       else {
         canvasCoordReadoutEl.textContent =
           `xFrac: ${show.xFrac.toFixed(3)}, yFrac: ${show.yFrac.toFixed(3)}` +
-          `${pinnedCanvasFrac ? " (고정)" : ""}`;
+          `${pinnedCanvasFrac ? t("coord.pinnedSuffix") : ""}`;
       }
     }
     if (canvasCoordCopyBtn) canvasCoordCopyBtn.disabled = !show;
@@ -116,7 +118,7 @@ export function mountCoordModeController(opts) {
     const ok = await copyText(txt);
     if (!canvasCoordCopyBtn) return;
     const prev = canvasCoordCopyBtn.textContent;
-    canvasCoordCopyBtn.textContent = ok ? "복사됨" : "실패";
+    canvasCoordCopyBtn.textContent = ok ? t("coord.copyDone") : t("coord.copyFail");
     setTimeout(() => {
       if (canvasCoordCopyBtn) canvasCoordCopyBtn.textContent = prev;
     }, 650);

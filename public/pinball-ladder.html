@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-page="pinball-ladder">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -47,6 +47,12 @@
         background: rgba(8, 16, 34, 0.78);
         box-shadow: 0 18px 46px rgba(0, 0, 0, 0.38);
       }
+      .pageTop {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
       h1 {
         margin: 0 0 14px;
         font-size: clamp(26px, 5vw, 38px);
@@ -77,24 +83,50 @@
       .links a {
         color: #ffd79a;
       }
+      .langSwitch {
+        display: inline-flex;
+        gap: 4px;
+      }
+      .langSwitch__btn {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+        color: #eaf1ff;
+        border-radius: 8px;
+        height: 28px;
+        min-width: 40px;
+        padding: 0 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .langSwitch__btn.is-active {
+        border-color: rgba(69, 243, 195, 0.6);
+        background: rgba(69, 243, 195, 0.2);
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>핀볼 사다리타기 데구르르</h1>
-      <p>
+      <div class="pageTop">
+        <h1 data-i18n="h1">핀볼 사다리타기 데구르르</h1>
+        <div class="langSwitch" aria-label="Language switch">
+          <button type="button" class="langSwitch__btn" data-lang-option="ko">KO</button>
+          <button type="button" class="langSwitch__btn" data-lang-option="en">EN</button>
+        </div>
+      </div>
+      <p data-i18n="p1">
         데구르르는 핀볼 사다리타기 형태의 참가자 선택 게임으로, 공이 내려오는 과정을 보며 결과를 확인할 수 있습니다.
       </p>
-      <p>
+      <p data-i18n="p2">
         핀볼 게임 특유의 긴장감과 결과 공개 연출을 살리면서도, 모임/방송/이벤트에서 빠르게 사용할 수 있도록 설계됐습니다.
       </p>
       <div class="cta">
-        <a class="btn" href="https://degururu.vercel.app/">데구르르 시작하기</a>
+        <a class="btn" href="https://degururu.vercel.app/" data-i18n="cta">데구르르 시작하기</a>
       </div>
       <div class="links">
-        관련 페이지:
-        <a href="https://degururu.vercel.app/pinball-game.html">핀볼 게임 안내</a>
+        <span data-i18n="related">관련 페이지:</span>
+        <a href="https://degururu.vercel.app/pinball-game.html" data-i18n="relatedLink">핀볼 게임 안내</a>
       </div>
     </main>
+    <script src="/static-page-i18n.js"></script>
   </body>
 </html>

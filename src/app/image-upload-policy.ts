@@ -1,3 +1,5 @@
+import { t } from "../i18n/runtime";
+
 export const UPLOAD_IMAGE_MIME_TYPES = [
   "image/png",
   "image/jpeg",
@@ -35,18 +37,18 @@ export function getDataUrlMimeType(dataUrl: unknown): string {
 }
 
 export function validateUploadImageFile(file: File): UploadValidation {
-  if (!(file instanceof File)) return { ok: false, message: "파일을 다시 선택해 주세요." };
+  if (!(file instanceof File)) return { ok: false, message: t("upload.reselect") };
 
   if (!isAllowedUploadImageMimeType(file.type)) {
-    return { ok: false, message: "PNG/JPG/WEBP/GIF/AVIF 이미지 파일만 업로드할 수 있어요." };
+    return { ok: false, message: t("upload.type") };
   }
 
   if (!Number.isFinite(file.size) || file.size <= 0) {
-    return { ok: false, message: "파일이 비어 있습니다. 다른 파일을 선택해 주세요." };
+    return { ok: false, message: t("upload.empty") };
   }
 
   if (file.size > UPLOAD_IMAGE_MAX_BYTES) {
-    return { ok: false, message: "이미지 파일은 최대 2MB까지 업로드할 수 있어요." };
+    return { ok: false, message: t("upload.maxSize") };
   }
 
   return { ok: true };

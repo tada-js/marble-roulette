@@ -14,6 +14,7 @@ import {
   type RequiredInquiryField,
   type UiActions,
 } from "../app/ui-store";
+import { useI18n } from "../i18n/react";
 import { UPLOAD_IMAGE_ACCEPT } from "../app/image-upload-policy";
 import { Button, IconButton } from "./components/Button";
 import { GameCanvasStage } from "./components/GameCanvasStage";
@@ -63,6 +64,7 @@ function useDialogSync(ref: RefObject<HTMLDialogElement | null>, isOpen: boolean
  * Engine/render logic stays in existing vanilla modules.
  */
 export function AppShell() {
+  const { t } = useI18n();
   const ui = useUiSnapshot();
   const [bgmMenuOpen, setBgmMenuOpen] = useState(false);
   const [fileNames, setFileNames] = useState<Record<string, string>>(() => ({}));
@@ -226,7 +228,7 @@ export function AppShell() {
   const canAddCatalogBall = ui.balls.length < CATALOG_MAX && !catalogLocked;
   const canRemoveCatalogBall = ui.balls.length > 1 && !catalogLocked;
   const canApplySettings = !!ui.settingsDirty && !catalogLocked;
-  const settingsCloseLabel = ui.settingsDirty ? "취소" : "닫기";
+  const settingsCloseLabel = ui.settingsDirty ? t("common.cancel") : t("common.close");
   const totalParticipants = ui.balls.reduce((sum, ball) => sum + Math.max(0, Math.floor(Number(ball.count) || 0)), 0);
   const statusMetaText =
     ui.statusTone === "ready"
@@ -237,8 +239,8 @@ export function AppShell() {
   const stopRunVisible = ui.statusTone === "running" || ui.statusTone === "paused";
   const stopRunDisabled = false;
   const viewLockTooltip = ui.viewLockDisabled
-    ? "게임 시작 후 시점 고정을 사용할 수 있어요."
-    : "켜면 후미 공 추적, 끄면 미니맵 이동";
+    ? t("app.viewLockDisabled")
+    : t("app.viewLockEnabled");
   const resultRollCandidates = ui.balls
     .filter((ball) => ball.count > 0)
     .flatMap((ball) => {
@@ -257,7 +259,7 @@ export function AppShell() {
       <div id="app">
         <TopBar
           startDisabled={ui.startDisabled || countdownValue != null}
-          startLabel={countdownValue != null ? "준비 중..." : ui.startLabel}
+          startLabel={countdownValue != null ? t("game.startPreparing") : ui.startLabel}
           stopRunVisible={stopRunVisible}
           stopRunDisabled={stopRunDisabled}
           speedMultiplier={ui.speedMultiplier}
@@ -334,11 +336,11 @@ export function AppShell() {
             size="lg"
             title={
               <span className="settingsTitle">
-                참가자 설정
-                {ui.settingsDirty ? <span className="settingsTitle__badge">변경됨</span> : null}
+                {t("settings.title")}
+                {ui.settingsDirty ? <span className="settingsTitle__badge">{t("settings.dirty")}</span> : null}
               </span>
             }
-            description="참가자를 추가/삭제하고, 이름과 이미지를 바꿀 수 있어요."
+            description={t("settings.description")}
             onClose={() => runAction("closeSettings")}
             footer={
               <div className="settingsFooter">
@@ -350,7 +352,7 @@ export function AppShell() {
                     disabled={!canAddCatalogBall}
                     onClick={() => runAction("addCatalogBall")}
                   >
-                    참가자 추가
+                    {t("settings.addParticipant")}
                   </Button>
                   <Button
                     id="restore-defaults"
@@ -359,7 +361,7 @@ export function AppShell() {
                     disabled={catalogLocked}
                     onClick={() => runAction("restoreDefaultCatalog")}
                   >
-                    설정 초기화
+                    {t("settings.reset")}
                   </Button>
                 </div>
                 <div className="settingsFooter__right">
@@ -371,7 +373,7 @@ export function AppShell() {
                     disabled={!canApplySettings}
                     onClick={() => runAction("applySettings")}
                   >
-                    적용
+                    {t("common.apply")}
                   </Button>
                   <Button
                     id="close-settings"
@@ -393,8 +395,8 @@ export function AppShell() {
                   <div className="twItem" key={ball.id}>
                     <IconButton
                       className="twItem__removeIcon"
-                      ariaLabel={`${ball.name} 삭제`}
-                      title="삭제"
+                      ariaLabel={`${ball.name} ${t("settings.remove")}`}
+                      title={t("settings.remove")}
                       disabled={!canRemoveCatalogBall}
                       onClick={() => runAction("removeCatalogBall", ball.id)}
                     >
@@ -409,7 +411,7 @@ export function AppShell() {
                           <img alt={ball.name} src={ball.imageDataUrl} />
                         </div>
                         <div className="field twItem__nameField">
-                          <label htmlFor={`ball-name-${ball.id}`}>이름</label>
+                          <label htmlFor={`ball-name-${ball.id}`}>{t("settings.name")}</label>
                           <input
                             id={`ball-name-${ball.id}`}
                             type="text"
@@ -421,13 +423,13 @@ export function AppShell() {
                         </div>
                       </div>
                     </div>
-                    <div className="twItem__secondaryId">ID: {ball.id}</div>
+                    <div className="twItem__secondaryId">{t("settings.id")}: {ball.id}</div>
                     <div className="field twItem__field">
-                      <label htmlFor={fileInputId}>이미지</label>
+                      <label htmlFor={fileInputId}>{t("settings.image")}</label>
                       <label className={`twUploadZone ${catalogLocked ? "is-disabled" : ""}`} htmlFor={fileInputId}>
-                        <span className="twUploadZone__title">이미지 업로드</span>
-                        <span className="twUploadZone__hint">클릭해서 파일을 선택하세요</span>
-                        <span className="twUploadZone__name">{fileNames[ball.id] || "선택 안 함"}</span>
+                        <span className="twUploadZone__title">{t("settings.uploadTitle")}</span>
+                        <span className="twUploadZone__hint">{t("settings.uploadHint")}</span>
+                        <span className="twUploadZone__name">{fileNames[ball.id] || t("common.notSelected")}</span>
                       </label>
                       <input
                         id={fileInputId}
@@ -449,7 +451,7 @@ export function AppShell() {
                           const file = event.currentTarget.files?.[0];
                           setFileNames((prev) => ({
                             ...prev,
-                            [ball.id]: file?.name ? file.name.slice(0, 32) : "선택 안 함",
+                            [ball.id]: file?.name ? file.name.slice(0, 32) : t("common.notSelected"),
                           }));
                           if (!file) return;
                           await runAction("setCatalogBallImage", ball.id, file);
@@ -482,15 +484,15 @@ export function AppShell() {
           <ModalCard
             className="settingsConfirm"
             size="sm"
-            title="설정 변경을 취소하시겠습니까?"
+            title={t("settings.discardConfirm")}
             onClose={() => runAction("cancelDiscardSettings")}
             footer={
               <div className="settingsConfirm__actions">
                 <Button width="md" variant="ghost" type="button" onClick={() => runAction("cancelDiscardSettings")}>
-                  아니오
+                  {t("common.no")}
                 </Button>
                 <Button width="md" variant="danger" type="button" onClick={() => runAction("confirmDiscardSettings")}>
-                  예
+                  {t("common.yes")}
                 </Button>
               </div>
             }
@@ -516,18 +518,19 @@ export function AppShell() {
         <form className="twModal" id="inquiry-form" onSubmit={handleInquirySubmit}>
           <ModalCard
             size="md"
-            title="문의하기"
+            title={t("inquiry.title")}
             onClose={() => runAction("closeInquiry")}
             footer={
               <Button id="inquiry-send" variant="primary" type="submit" disabled={ui.inquirySubmitting}>
-                {ui.inquirySubmitting ? "전송 중..." : "메일 보내기"}
+                {ui.inquirySubmitting ? t("inquiry.sending") : t("inquiry.send")}
               </Button>
             }
           >
             <div className="inquiryForm">
               <div className="field">
                 <label htmlFor="inq-email">
-                  <span className="field__required">*</span>이메일
+                  <span className="field__required">*</span>
+                  {t("inquiry.email")}
                 </label>
                 <input
                   id="inq-email"
@@ -544,7 +547,8 @@ export function AppShell() {
               </div>
               <div className="field">
                 <label htmlFor="inq-subject">
-                  <span className="field__required">*</span>제목
+                  <span className="field__required">*</span>
+                  {t("inquiry.subject")}
                 </label>
                 <input
                   id="inq-subject"
@@ -552,7 +556,7 @@ export function AppShell() {
                   type="text"
                   maxLength={80}
                   required
-                  placeholder="문의 제목"
+                  placeholder={t("inquiry.subjectPlaceholder")}
                   value={ui.inquiryForm.subject}
                   ref={inquirySubjectRef}
                   onChange={(event) => runAction("setInquiryField", "subject", event.currentTarget.value)}
@@ -560,7 +564,8 @@ export function AppShell() {
               </div>
               <div className="field">
                 <label htmlFor="inq-message">
-                  <span className="field__required">*</span>내용
+                  <span className="field__required">*</span>
+                  {t("inquiry.message")}
                 </label>
                 <textarea
                   id="inq-message"
@@ -568,7 +573,7 @@ export function AppShell() {
                   rows={6}
                   maxLength={2000}
                   required
-                  placeholder="문의 내용을 작성해 주세요."
+                  placeholder={t("inquiry.messagePlaceholder")}
                   value={ui.inquiryForm.message}
                   ref={inquiryMessageRef}
                   onChange={(event) => runAction("setInquiryField", "message", event.currentTarget.value)}
@@ -580,7 +585,7 @@ export function AppShell() {
               <div className="field inquiryNotice">
                 <div className="inquiryNotice__meta">
                   <span className="inquiryNotice__text">
-                    문의 응답을 위해 이메일, 제목, 내용이 수집됩니다. 보관기간 문의 처리 완료 후 최대 1년
+                    {t("inquiry.notice")}
                   </span>
                   <a
                     className="inquiryNotice__link"
@@ -588,12 +593,12 @@ export function AppShell() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    개인정보 처리방침 보기
+                    {t("inquiry.privacy")}
                   </a>
                 </div>
               </div>
               <div className="inquiryHoneypot" aria-hidden="true">
-                <label htmlFor="inq-website">웹사이트</label>
+                <label htmlFor="inq-website">{t("inquiry.website")}</label>
                 <input
                   id="inq-website"
                   name="website"

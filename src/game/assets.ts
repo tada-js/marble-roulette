@@ -1,4 +1,5 @@
 import { classifyAvatarGlyph, getAvatarTextLayout } from "./avatar-glyph.ts";
+import { getCurrentLanguage, tWithLanguage, type Language } from "../i18n/runtime";
 
 type BallCatalogItem = {
   id: string;
@@ -116,28 +117,72 @@ function readSystemBallGradient(value: string): { c0: string; c1: string } | nul
   };
 }
 
-export const DEFAULT_BALLS: BallCatalogItem[] = [
-  makeLetterBall({ id: "dog", name: "강아지", c0: "#ffd36b", c1: "#ff2e7a", tint: "#ffb000" }),
-  makeLetterBall({ id: "rabbit", name: "토끼", c0: "#7df3d3", c1: "#2aa6ff", tint: "#45f3c3" }),
-  makeLetterBall({ id: "hamster", name: "햄스터", c0: "#ffe9b7", c1: "#caa0ff", tint: "#caa0ff" }),
-];
+const BALL_KEY_BY_ID = {
+  dog: "ball.dog",
+  rabbit: "ball.rabbit",
+  hamster: "ball.hamster",
+  cat: "ball.cat",
+  guineapig: "ball.guineapig",
+  panda: "ball.panda",
+  redpanda: "ball.redpanda",
+  capybara: "ball.capybara",
+  quokka: "ball.quokka",
+  otter: "ball.otter",
+  tiger: "ball.tiger",
+  fox: "ball.fox",
+  magpie: "ball.magpie",
+  elephant: "ball.elephant",
+  penguin: "ball.penguin",
+} as const;
 
-// Library for adding new balls (capped to 15).
-export const BALL_LIBRARY: BallCatalogItem[] = [
-  ...DEFAULT_BALLS,
-  makeLetterBall({ id: "cat", name: "고양이", c0: "#ff7ad9", c1: "#7a5cff", tint: "#ff7ad9" }),
-  makeLetterBall({ id: "guineapig", name: "기니피그", c0: "#ffde7a", c1: "#ff7a7a", tint: "#ffde7a" }),
-  makeLetterBall({ id: "panda", name: "판다", c0: "#5df0ff", c1: "#00ffa8", tint: "#5df0ff" }),
-  makeLetterBall({ id: "redpanda", name: "레서판다", c0: "#ffb36b", c1: "#ff4d6d", tint: "#ffb36b" }),
-  makeLetterBall({ id: "capybara", name: "카피바라", c0: "#ffd36b", c1: "#8bffb0", tint: "#ffd36b" }),
-  makeLetterBall({ id: "quokka", name: "쿼카", c0: "#caa0ff", c1: "#2aa6ff", tint: "#caa0ff" }),
-  makeLetterBall({ id: "otter", name: "수달", c0: "#7df3d3", c1: "#ffb000", tint: "#7df3d3" }),
-  makeLetterBall({ id: "tiger", name: "호랑이", c0: "#ffb000", c1: "#ff4d6d", tint: "#ffb000" }),
-  makeLetterBall({ id: "fox", name: "여우", c0: "#ff9f2e", c1: "#ff2e7a", tint: "#ff9f2e" }),
-  makeLetterBall({ id: "magpie", name: "까치", c0: "#9afcff", c1: "#ffffff", tint: "#9afcff" }),
-  makeLetterBall({ id: "elephant", name: "코끼리", c0: "#9aa8c4", c1: "#2aa6ff", tint: "#9aa8c4" }),
-  makeLetterBall({ id: "penguin", name: "펭귄", c0: "#2aa6ff", c1: "#00ffa8", tint: "#2aa6ff" }),
-];
+const DEFAULT_BALL_ID_SET = new Set<string>(["dog", "rabbit", "hamster"]);
+
+const BALL_STYLE_LIBRARY = [
+  { id: "dog", c0: "#ffd36b", c1: "#ff2e7a", tint: "#ffb000" },
+  { id: "rabbit", c0: "#7df3d3", c1: "#2aa6ff", tint: "#45f3c3" },
+  { id: "hamster", c0: "#ffe9b7", c1: "#caa0ff", tint: "#caa0ff" },
+  { id: "cat", c0: "#ff7ad9", c1: "#7a5cff", tint: "#ff7ad9" },
+  { id: "guineapig", c0: "#ffde7a", c1: "#ff7a7a", tint: "#ffde7a" },
+  { id: "panda", c0: "#5df0ff", c1: "#00ffa8", tint: "#5df0ff" },
+  { id: "redpanda", c0: "#ffb36b", c1: "#ff4d6d", tint: "#ffb36b" },
+  { id: "capybara", c0: "#ffd36b", c1: "#8bffb0", tint: "#ffd36b" },
+  { id: "quokka", c0: "#caa0ff", c1: "#2aa6ff", tint: "#caa0ff" },
+  { id: "otter", c0: "#7df3d3", c1: "#ffb000", tint: "#7df3d3" },
+  { id: "tiger", c0: "#ffb000", c1: "#ff4d6d", tint: "#ffb000" },
+  { id: "fox", c0: "#ff9f2e", c1: "#ff2e7a", tint: "#ff9f2e" },
+  { id: "magpie", c0: "#9afcff", c1: "#ffffff", tint: "#9afcff" },
+  { id: "elephant", c0: "#9aa8c4", c1: "#2aa6ff", tint: "#9aa8c4" },
+  { id: "penguin", c0: "#2aa6ff", c1: "#00ffa8", tint: "#2aa6ff" },
+] as const;
+
+export function getBallDisplayName(ballId: string, language: Language = getCurrentLanguage()): string {
+  const key = BALL_KEY_BY_ID[ballId as keyof typeof BALL_KEY_BY_ID];
+  return key ? tWithLanguage(language, key) : ballId;
+}
+
+function buildBallCatalog(language: Language): BallCatalogItem[] {
+  return BALL_STYLE_LIBRARY.map((entry) =>
+    makeLetterBall({
+      id: entry.id,
+      name: getBallDisplayName(entry.id, language),
+      c0: entry.c0,
+      c1: entry.c1,
+      tint: entry.tint,
+    })
+  );
+}
+
+export function getBallLibrary(language: Language = getCurrentLanguage()): BallCatalogItem[] {
+  return buildBallCatalog(language);
+}
+
+export function getDefaultBalls(language: Language = getCurrentLanguage()): BallCatalogItem[] {
+  return buildBallCatalog(language).filter((item) => DEFAULT_BALL_ID_SET.has(item.id));
+}
+
+// Backward-compatible exports (Korean defaults).
+export const BALL_LIBRARY: BallCatalogItem[] = getBallLibrary("ko");
+export const DEFAULT_BALLS: BallCatalogItem[] = getDefaultBalls("ko");
 
 export function buildSystemBallImageDataUrl({
   ballId,

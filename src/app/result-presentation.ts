@@ -1,4 +1,5 @@
 import type { FinishedMarble } from "../game/engine.ts";
+import { t } from "../i18n/runtime";
 import type { ResultUiItem } from "./ui-store";
 
 export type ResultPresentationPhase = "idle" | "spinning" | "single" | "summary";
@@ -91,7 +92,7 @@ export function buildResultItems(params: BuildResultItemsParams): ResultUiItem[]
     return {
       rank: idx + 1,
       ballId: entry.ballId,
-      name: payload?.name || entry.ballId || "알 수 없는 공",
+      name: payload?.name || entry.ballId || t("ball.unknown"),
       img: payload?.img || "",
       finishedAt: getArrivalTimeSeconds(entry),
       slot: entry.slot,

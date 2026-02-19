@@ -1,8 +1,10 @@
 /**
  * Small external UI store shared between bootstrap (game logic) and React UI.
  */
+import { getDefaultStartCaption } from "./game-flow-selectors";
+import { t } from "../i18n/runtime";
+
 const listeners = new Set<() => void>();
-const DEFAULT_START_CAPTION = "두근두근 당첨자는 누구일까요?";
 
 export type InquiryField = "email" | "subject" | "message" | "website";
 export type RequiredInquiryField = "email" | "subject" | "message";
@@ -136,11 +138,11 @@ export type UiActions = RunActions &
 
 const DEFAULT_SNAPSHOT: UiSnapshot = Object.freeze({
   startDisabled: true,
-  startLabel: "게임 시작",
+  startLabel: t("game.start"),
   pauseDisabled: true,
-  pauseLabel: "일시정지",
+  pauseLabel: t("game.pause"),
   pausePressed: false,
-  statusLabel: "준비됨",
+  statusLabel: t("status.ready"),
   statusTone: "ready",
   statusRemainingCount: null,
   lastFewRemaining: 0,
@@ -150,7 +152,7 @@ const DEFAULT_SNAPSHOT: UiSnapshot = Object.freeze({
   winnerCount: 1,
   winnerCountMax: 1,
   winnerCountWasClamped: false,
-  startCaption: DEFAULT_START_CAPTION,
+  startCaption: getDefaultStartCaption(),
   resultState: Object.freeze({
     open: false,
     phase: "idle",
@@ -178,7 +180,7 @@ const DEFAULT_SNAPSHOT: UiSnapshot = Object.freeze({
 
 const NOOP_VOID = (): void => {};
 const NOOP_FALSE = (): false => false;
-const NOOP_SUBMIT = (): InquirySubmitResult => ({ ok: false, message: "구현되지 않았습니다." });
+const NOOP_SUBMIT = (): InquirySubmitResult => ({ ok: false, message: t("ui.noopSubmit") });
 
 const RUN_NOOPS: RunActions = {
   handleStartClick: NOOP_VOID,

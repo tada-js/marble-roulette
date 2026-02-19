@@ -1,4 +1,4 @@
-const SW_VERSION = "degururu-pwa-v4";
+const SW_VERSION = "degururu-pwa-v5";
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
 const PRECACHE_URLS = [
@@ -6,7 +6,12 @@ const PRECACHE_URLS = [
   "/index.html",
   "/styles.css",
   "/manifest.webmanifest",
+  "/manifest-en.webmanifest",
   "/offline.html",
+  "/privacy-policy.html",
+  "/pinball-game.html",
+  "/pinball-ladder.html",
+  "/static-page-i18n.js",
   "/favicon.ico",
   "/assets/og-image.png",
   "/assets/pwa-192.png",

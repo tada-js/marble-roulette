@@ -1,4 +1,5 @@
 import type { ReactNode, RefObject } from "react";
+import { useI18n } from "../../i18n/react";
 import { Button, IconButton } from "./Button";
 import { AppIcon } from "./Icons";
 
@@ -22,6 +23,7 @@ type TopBarProps = {
 };
 
 export function TopBar(props: TopBarProps) {
+  const { language, setLanguage, t } = useI18n();
   const {
     startDisabled,
     startLabel,
@@ -41,6 +43,8 @@ export function TopBar(props: TopBarProps) {
     onInquiry,
   } = props;
   const isFastMode = speedMultiplier >= 2;
+  const nextLanguage = language === "ko" ? "en" : "ko";
+  const showBrandAlias = language === "ko";
   const runActionButtons: ReactNode[] = [];
   const topbarClassName = ["topbar", stopRunVisible ? "topbar--run" : ""].filter(Boolean).join(" ");
 
@@ -53,10 +57,10 @@ export function TopBar(props: TopBarProps) {
         size="sm"
         className="topbar__stop"
         disabled={stopRunDisabled}
-        title="진행을 중지하고 초기화"
+        title={t("topbar.stopTitle")}
         onClick={onStopRun}
       >
-        중지
+        {t("topbar.stop")}
       </Button>
     );
   }
@@ -68,8 +72,8 @@ export function TopBar(props: TopBarProps) {
           <span className="brand__markGlyph">DG</span>
         </div>
         <div className="brand__wording">
-          <div className="brand__title" title="데구르르 (Degururu)">
-            데구르르 <span className="brand__titleEn">(Degururu)</span>
+          <div className="brand__title" title={t("topbar.brandTitle")}>
+            {t("topbar.brandLabel")} {showBrandAlias ? <span className="brand__titleEn">(Degururu)</span> : null}
           </div>
         </div>
       </div>
@@ -92,19 +96,30 @@ export function TopBar(props: TopBarProps) {
           size="sm"
           className={`topbar__speed topbar__action ${isFastMode ? "is-fast" : ""}`}
           ariaPressed={isFastMode}
-          title={isFastMode ? "2배속 해제" : "2배속"}
+          title={isFastMode ? t("topbar.speedOff") : t("topbar.speedOn")}
           onClick={onToggleSpeed}
         >
           {isFastMode ? "2x" : "1x"}
+        </Button>
+
+        <Button
+          id="lang-btn"
+          variant="ghost"
+          size="sm"
+          className="topbar__lang topbar__action"
+          title={t("lang.toggleLabel")}
+          onClick={() => setLanguage(nextLanguage)}
+        >
+          {t("lang.code")}
         </Button>
 
         <div className="bgmControl" ref={bgmControlRef}>
           <IconButton
             id="bgm-btn"
             className={`bgmControl__toggleIcon topbar__action ${bgmOn ? "is-on" : "is-off"}`}
-            ariaLabel={bgmOn ? "BGM 끄기" : "BGM 켜기"}
+            ariaLabel={bgmOn ? t("topbar.bgmOff") : t("topbar.bgmOn")}
             ariaPressed={bgmOn}
-            title={bgmOn ? "BGM 끄기" : "BGM 켜기"}
+            title={bgmOn ? t("topbar.bgmOff") : t("topbar.bgmOn")}
             onClick={onToggleBgm}
           >
             <AppIcon name={bgmOn ? "volume-on" : "volume-off"} />
@@ -113,10 +128,10 @@ export function TopBar(props: TopBarProps) {
           <IconButton
             id="bgm-settings-btn"
             className={`bgmControl__music topbar__action ${bgmMenuOpen ? "is-open" : ""}`}
-            ariaLabel="BGM 트랙 선택"
+            ariaLabel={t("topbar.bgmTrack")}
             ariaHasPopup="menu"
             ariaExpanded={bgmMenuOpen}
-            title="BGM 선택"
+            title={t("topbar.bgmMenu")}
             onClick={onToggleBgmMenu}
           >
             <AppIcon name="music-track" />
@@ -159,8 +174,8 @@ export function TopBar(props: TopBarProps) {
         <IconButton
           id="inquiry-btn"
           className="topbar__iconAction topbar__action"
-          ariaLabel="문의하기 열기"
-          title="문의하기"
+          ariaLabel={t("topbar.inquiryOpen")}
+          title={t("topbar.inquiry")}
           onClick={onInquiry}
         >
           <AppIcon name="mail" />

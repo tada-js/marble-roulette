@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-page="privacy">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -30,7 +30,14 @@
         margin: 0 auto;
         padding: 28px 18px 40px;
       }
-      h1 { margin: 0 0 18px; font-size: 24px; }
+      .pageTop {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      h1 { margin: 0; font-size: 24px; }
       section {
         background: color-mix(in oklab, var(--panel) 88%, black 12%);
         border: 1px solid rgba(255,255,255,0.12);
@@ -42,37 +49,63 @@
       p, li { margin: 0; line-height: 1.55; color: var(--text); }
       ul { margin: 0; padding-left: 18px; }
       small { color: var(--muted); display: block; margin-top: 14px; }
+      .langSwitch {
+        display: inline-flex;
+        gap: 4px;
+      }
+      .langSwitch__btn {
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+        color: #eaf1ff;
+        border-radius: 8px;
+        height: 28px;
+        min-width: 40px;
+        padding: 0 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .langSwitch__btn.is-active {
+        border-color: rgba(69, 243, 195, 0.6);
+        background: rgba(69, 243, 195, 0.2);
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>개인정보 처리방침</h1>
+      <div class="pageTop">
+        <h1 data-i18n="h1">개인정보 처리방침</h1>
+        <div class="langSwitch" aria-label="Language switch">
+          <button type="button" class="langSwitch__btn" data-lang-option="ko">KO</button>
+          <button type="button" class="langSwitch__btn" data-lang-option="en">EN</button>
+        </div>
+      </div>
 
       <section>
-        <h2>1. 수집 항목</h2>
+        <h2 data-i18n="h2_1">1. 수집 항목</h2>
         <ul>
-          <li>이메일</li>
-          <li>문의 제목</li>
-          <li>문의 내용</li>
+          <li data-i18n="li_1">이메일</li>
+          <li data-i18n="li_2">문의 제목</li>
+          <li data-i18n="li_3">문의 내용</li>
         </ul>
       </section>
 
       <section>
-        <h2>2. 이용 목적</h2>
-        <p>문의 확인, 답변 전달, 서비스 개선을 위한 최소한의 연락/기록 목적에만 사용합니다.</p>
+        <h2 data-i18n="h2_2">2. 이용 목적</h2>
+        <p data-i18n="p_2">문의 확인, 답변 전달, 서비스 개선을 위한 최소한의 연락/기록 목적에만 사용합니다.</p>
       </section>
 
       <section>
-        <h2>3. 보관 기간</h2>
-        <p>문의 처리 완료 후 최대 1년 보관 후 파기합니다.</p>
+        <h2 data-i18n="h2_3">3. 보관 기간</h2>
+        <p data-i18n="p_3">문의 처리 완료 후 최대 1년 보관 후 파기합니다.</p>
       </section>
 
       <section>
-        <h2>4. 문의</h2>
-        <p>개인정보 관련 문의는 서비스 운영자에게 요청할 수 있습니다.</p>
+        <h2 data-i18n="h2_4">4. 문의</h2>
+        <p data-i18n="p_4">개인정보 관련 문의는 서비스 운영자에게 요청할 수 있습니다.</p>
       </section>
 
-      <small>본 문서는 운영 정책에 맞춰 변경될 수 있습니다.</small>
+      <small data-i18n="note">본 문서는 운영 정책에 맞춰 변경될 수 있습니다.</small>
     </main>
+    <script src="/static-page-i18n.js"></script>
   </body>
 </html>

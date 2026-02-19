@@ -192,6 +192,20 @@ html, body {
   background: rgba(255,255,255,0.14);
   color: rgba(244,248,255,0.98);
 }
+.topbar__lang.btn {
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.9);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.35px;
+  line-height: 1;
+  box-shadow: none;
+}
+.topbar__lang.btn:hover:not(:disabled) {
+  border-color: rgba(255,255,255,0.30);
+  background: rgba(255,255,255,0.12);
+}
 .bgmControl {
   position: relative;
   display: inline-flex;
@@ -955,14 +969,29 @@ canvas#game {
 .resultOption__viewWrap {
   display: inline-flex;
   align-items: center;
+  position: relative;
+  z-index: 7;
 }
 .resultOption__viewWrap.tooltip::after {
   left: auto;
   right: 0;
+  top: calc(100% + 8px);
+  bottom: auto;
+  max-width: min(260px, calc(100vw - 28px));
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+  transform: translateY(-6px);
 }
 .resultOption__viewWrap.tooltip::before {
   left: auto;
   right: 14px;
+  top: calc(100% + 2px);
+  bottom: auto;
+  border-left: 1px solid rgba(255,255,255,0.14);
+  border-top: 1px solid rgba(255,255,255,0.14);
+  border-bottom: 0;
 }
 .resultOption__controls {
   display: flex;
@@ -1400,7 +1429,7 @@ canvas#game {
   left: 0;
   bottom: calc(100% + 8px);
   width: max-content;
-  max-width: calc(100vw - 32px);
+  max-width: min(280px, calc(100vw - 24px));
   padding: 6px 10px;
   border-radius: 10px;
   background: rgba(17, 24, 39, 0.94);
@@ -1415,9 +1444,10 @@ canvas#game {
   transition: opacity 90ms ease, transform 90ms ease;
   pointer-events: none;
   z-index: 50;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
 }
 .tooltip::before {
   content: "";

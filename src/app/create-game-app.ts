@@ -11,8 +11,8 @@ import {
   setBallCount,
 } from "../game/engine.ts";
 import {
-  BALL_LIBRARY,
-  DEFAULT_BALLS,
+  getBallLibrary,
+  getDefaultBalls,
   buildSystemBallImageDataUrl,
   isSystemBallAvatarUrl,
 } from "../game/assets.ts";
@@ -38,8 +38,8 @@ import { setUiActions, setUiSnapshot } from "./ui-store";
 import { ANALYTICS_EVENTS, trackAnalyticsEvent } from "./analytics";
 import { createArrivalTimingTracker } from "./arrival-timing-tracker";
 import {
-  DEFAULT_START_CAPTION,
-  STATUS_LABEL_BY_TONE,
+  getDefaultStartCaption,
+  getStatusLabelByTone,
   clamp,
   deriveStatusTone,
   getFinishTempoMultiplier,
@@ -49,6 +49,12 @@ import {
   sanitizeBallName,
   sanitizeStartCaption,
 } from "./game-flow-selectors";
+import {
+  getCurrentLanguage,
+  subscribeLanguage,
+  t,
+  type Language,
+} from "../i18n/runtime";
 import {
   buildIdleResultState,
   buildResultItems,
@@ -127,7 +133,7 @@ function fileToDataUrl(file: File): Promise<string> {
   }
   return new Promise<string>((resolve, reject) => {
     const fr = new FileReader();
-    fr.onerror = () => reject(new Error("파일을 읽지 못했습니다."));
+    fr.onerror = () => reject(new Error(t("error.fileRead")));
     fr.onload = () => resolve(String(fr.result || ""));
     fr.readAsDataURL(file);
   });
@@ -222,7 +228,7 @@ async function copyTextWithFallback(text: string): Promise<boolean> {
 function getDomRefs() {
   const canvas = document.getElementById("game");
   if (!(canvas instanceof HTMLCanvasElement)) {
-    throw new Error("게임 캔버스를 찾을 수 없습니다: #game");
+    throw new Error(t("error.canvasMissing", { selector: "#game" }));
   }
 
   const minimapEl = document.getElementById("minimap");
@@ -274,7 +280,7 @@ export function bootstrapGameApp() {
     settingsDraft: null,
     winnerCount: 1,
     winnerCountWasClamped: false,
-    startCaption: DEFAULT_START_CAPTION,
+    startCaption: getDefaultStartCaption(),
     resultState: buildIdleResultState(1),
     inquiryOpen: false,
     inquirySubmitting: false,
@@ -283,6 +289,7 @@ export function bootstrapGameApp() {
     inquiryForm: { ...EMPTY_INQUIRY_FORM },
     speedMultiplier: 1,
   };
+  let currentLanguage: Language = getCurrentLanguage();
 
   let refreshUi: () => void = () => {};
   let applyLoopSpeed = (_speedMultiplier: number): void => {};
@@ -299,6 +306,7 @@ export function bootstrapGameApp() {
       refreshUi();
     },
   });
+  catalogController.relocalizeCatalog?.(currentLanguage);
 
   const audioController = createAudioController({
     onStateChange: () => {
@@ -463,13 +471,13 @@ export function bootstrapGameApp() {
       uiState.winnerCount = clampedWinnerCount;
     }
     const statusTone = deriveStatusTone(state);
-    const statusLabel = STATUS_LABEL_BY_TONE[statusTone];
+    const statusLabel = getStatusLabelByTone(statusTone);
 
     const nextSnapshot: UiSnapshot = {
       startDisabled: total <= 0,
-      startLabel: inRun ? "다시 시작" : "게임 시작",
+      startLabel: inRun ? t("game.restart") : t("game.start"),
       pauseDisabled: !inRun,
-      pauseLabel: state.paused ? "이어하기" : "일시정지",
+      pauseLabel: state.paused ? t("game.resume") : t("game.pause"),
       pausePressed: !!state.paused,
       statusLabel,
       statusTone,
@@ -512,6 +520,18 @@ export function bootstrapGameApp() {
     renderer.setStartCaption?.(uiState.startCaption);
     setUiSnapshot(nextSnapshot);
   };
+
+  const unsubscribeLanguage = subscribeLanguage(() => {
+    const nextLanguage = getCurrentLanguage();
+    const previousDefaultCaption = getDefaultStartCaption(currentLanguage);
+    const nextDefaultCaption = getDefaultStartCaption(nextLanguage);
+    if (uiState.startCaption === previousDefaultCaption) {
+      uiState.startCaption = nextDefaultCaption;
+    }
+    catalogController.relocalizeCatalog?.(nextLanguage);
+    currentLanguage = nextLanguage;
+    refreshUi();
+  });
 
   const sessionController = createSessionController({
     state,
@@ -660,9 +680,10 @@ export function bootstrapGameApp() {
     addCatalogBall: () => {
       if (!uiState.settingsOpen || isBallControlLocked()) return false;
       const draft = ensureSettingsDraft();
-      if (draft.length >= BALL_LIBRARY.length) return false;
+      const library = getBallLibrary();
+      if (draft.length >= library.length) return false;
       const used = new Set(draft.map((ball) => ball.id));
-      const nextBall = BALL_LIBRARY.find((ball) => !used.has(ball.id));
+      const nextBall = library.find((ball) => !used.has(ball.id));
       if (!nextBall) return false;
       uiState.settingsDraft = [...draft, structuredClone(nextBall)];
       recalcSettingsDirty();
@@ -702,7 +723,7 @@ export function bootstrapGameApp() {
     },
     restoreDefaultCatalog: () => {
       if (!uiState.settingsOpen || isBallControlLocked()) return false;
-      uiState.settingsDraft = structuredClone(DEFAULT_BALLS);
+      uiState.settingsDraft = structuredClone(getDefaultBalls());
       recalcSettingsDirty();
       refreshUi();
       return true;
@@ -743,7 +764,7 @@ export function bootstrapGameApp() {
       try {
         dataUrl = await fileToDataUrl(file);
       } catch (err) {
-        const message = err instanceof Error && err.message ? err.message : "이미지 업로드에 실패했습니다.";
+        const message = err instanceof Error && err.message ? err.message : t("error.uploadFailed");
         showInquiryToast(message, "error", 2200);
         refreshUi();
         return false;
@@ -795,9 +816,9 @@ export function bootstrapGameApp() {
           selectedCount: uiState.resultState.items.length,
           requestedCount: uiState.resultState.requestedCount,
         });
-        showInquiryToast("결과를 복사했습니다.", "success", 1800);
+        showInquiryToast(t("toast.resultCopied"), "success", 1800);
       } else {
-        showInquiryToast("결과 복사에 실패했습니다.", "error", 2200);
+        showInquiryToast(t("toast.resultCopyFailed"), "error", 2200);
       }
       refreshUi();
       return copied;
@@ -838,7 +859,7 @@ export function bootstrapGameApp() {
     },
     submitInquiry: async (): Promise<InquirySubmitResult> => {
       if (uiState.inquirySubmitting) {
-        return { ok: false, message: "이미 전송 중입니다." };
+        return { ok: false, message: t("inquiry.alreadySubmitting") };
       }
 
       const validated = validateInquiryInput(uiState.inquiryForm) as InquiryValidationResult;
@@ -849,7 +870,7 @@ export function bootstrapGameApp() {
       }
 
       uiState.inquirySubmitting = true;
-      uiState.inquiryStatus = "전송 중...";
+      uiState.inquiryStatus = t("inquiry.sendingStatus");
       refreshUi();
 
       try {
@@ -868,12 +889,12 @@ export function bootstrapGameApp() {
         uiState.inquiryStatus = "";
         uiState.inquiryOpenedAt = 0;
         uiState.inquiryForm = { ...EMPTY_INQUIRY_FORM };
-        showInquiryToast("메일 전송 완료");
+        showInquiryToast(t("inquiry.sendDone"));
         return { ok: true };
       } catch {
-        const message = "네트워크 오류가 발생했습니다.";
+        const message = t("error.network");
         uiState.inquiryStatus = message;
-        showInquiryToast("네트워크 오류", "error", 2600);
+        showInquiryToast(t("toast.networkError"), "error", 2600);
         return { ok: false, message };
       } finally {
         uiState.inquirySubmitting = false;
@@ -960,6 +981,7 @@ export function bootstrapGameApp() {
     refreshUi,
     dispose: () => {
       syncLoopSpeed(true);
+      unsubscribeLanguage();
       viewControls.dispose?.();
     },
   };

@@ -1,8 +1,8 @@
 import type { StatusTone } from "./ui-store";
+import { t, tWithLanguage, type Language } from "../i18n/runtime";
 
 // At 3x caption font, ~28 chars keeps 2-line readability on 900px world width.
 export const START_CAPTION_MAX = 28;
-export const DEFAULT_START_CAPTION = "두근두근 당첨자는 누구일까요?";
 const FINISH_TENSION_TRIGGER_Y_FRAC = 0.82;
 const FINISH_TENSION_BASE_SLOWDOWN = 0.72;
 const FINISH_TENSION_SLOWDOWN_BY_REMAINING = {
@@ -17,11 +17,35 @@ const FINISH_TENSION_CAP_BY_REMAINING = {
 } as const;
 
 export const STATUS_LABEL_BY_TONE: Record<StatusTone, string> = {
-  ready: "준비됨",
-  running: "진행 중",
-  paused: "일시 정지",
-  done: "결과 준비 완료",
+  ready: t("status.ready"),
+  running: t("status.running"),
+  paused: t("status.paused"),
+  done: t("status.done"),
 };
+
+export function getDefaultStartCaption(language?: Language): string {
+  return language ? tWithLanguage(language, "game.startCaptionDefault") : t("game.startCaptionDefault");
+}
+
+export function getStatusLabelByTone(tone: StatusTone, language?: Language): string {
+  if (language) {
+    const byLanguage: Record<StatusTone, string> = {
+      ready: tWithLanguage(language, "status.ready"),
+      running: tWithLanguage(language, "status.running"),
+      paused: tWithLanguage(language, "status.paused"),
+      done: tWithLanguage(language, "status.done"),
+    };
+    return byLanguage[tone];
+  }
+
+  const byCurrentLanguage: Record<StatusTone, string> = {
+    ready: t("status.ready"),
+    running: t("status.running"),
+    paused: t("status.paused"),
+    done: t("status.done"),
+  };
+  return byCurrentLanguage[tone];
+}
 
 export type FinishTensionSnapshot = {
   active: boolean;

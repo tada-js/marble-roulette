@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Analytics } from "@vercel/analytics/react";
 import { initAnalytics } from "./app/analytics";
 import { bootstrapGameApp } from "./app/create-game-app";
+import { initializeI18n, t } from "./i18n/runtime";
 import { AppShell } from "./ui-react/AppShell";
 import { registerServiceWorker } from "./pwa/register-service-worker";
 
@@ -42,8 +43,10 @@ function App() {
   );
 }
 
+initializeI18n();
+
 const rootEl = document.getElementById("root");
-if (!rootEl) throw new Error("루트 엘리먼트를 찾을 수 없습니다: #root");
+if (!rootEl) throw new Error(t("error.rootMissing", { selector: "#root" }));
 
 createRoot(rootEl).render(<App />);
 registerServiceWorker();

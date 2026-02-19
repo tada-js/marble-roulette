@@ -1,4 +1,5 @@
 import type { StatusTone } from "../../app/ui-store";
+import { useI18n } from "../../i18n/react";
 import { Button } from "./Button";
 import { StatusBadge } from "./StatusBadge";
 
@@ -19,6 +20,8 @@ export function GameCanvasStage({
   statusMetaText,
   onSkipCountdown,
 }: GameCanvasStageProps) {
+  const { t } = useI18n();
+
   return (
     <div className="board">
       <canvas id="game" width="900" height="1350"></canvas>
@@ -36,7 +39,7 @@ export function GameCanvasStage({
             {countdownValue}
           </div>
           <button type="button" className="boardCountdown__skip" onClick={onSkipCountdown}>
-            건너뛰기
+            {t("board.skip")}
           </button>
         </div>
       ) : null}
@@ -46,7 +49,7 @@ export function GameCanvasStage({
             xFrac: -, yFrac: -
           </div>
           <Button id="canvas-coord-copy" variant="ghost" className="board__copy" disabled>
-            좌표 복사
+            {t("board.copyCoords")}
           </Button>
         </div>
       ) : null}

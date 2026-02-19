@@ -1,4 +1,5 @@
 import Toastify from "toastify-js";
+import { t } from "../i18n/runtime.ts";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const XSS_RE = /<[^>]*>|javascript:|on\w+\s*=|data:text\/html/i;
@@ -51,10 +52,10 @@ export function validateInquiryInput(input) {
   const message = sanitizeMultiLine(input?.message, INQUIRY_LIMITS.message);
   const website = sanitizeSingleLine(input?.website, INQUIRY_LIMITS.website);
 
-  if (!email) return { ok: false, field: "email", message: "이메일을 입력해 주세요." };
-  if (!EMAIL_RE.test(email)) return { ok: false, field: "email", message: "이메일 형식이 올바르지 않습니다." };
-  if (!subject) return { ok: false, field: "subject", message: "제목을 입력해 주세요." };
-  if (!message) return { ok: false, field: "message", message: "내용을 입력해 주세요." };
+  if (!email) return { ok: false, field: "email", message: t("inquiry.validation.emailRequired") };
+  if (!EMAIL_RE.test(email)) return { ok: false, field: "email", message: t("inquiry.validation.emailInvalid") };
+  if (!subject) return { ok: false, field: "subject", message: t("inquiry.validation.subjectRequired") };
+  if (!message) return { ok: false, field: "message", message: t("inquiry.validation.messageRequired") };
 
   const fieldChecks = [
     ["email", email],
@@ -63,7 +64,7 @@ export function validateInquiryInput(input) {
   ];
   const firstBadField = fieldChecks.find((entry) => hasSuspiciousMarkup(entry[1]))?.[0];
   if (firstBadField) {
-    return { ok: false, field: firstBadField, message: "허용되지 않는 입력 형식이 포함되어 있습니다." };
+    return { ok: false, field: firstBadField, message: t("inquiry.validation.suspicious") };
   }
 
   return {
@@ -87,10 +88,10 @@ export async function submitInquiry(payload, opts = {}) {
   if (!response.ok || !result?.ok) {
     return {
       ok: false,
-      message: result?.message || "문의 전송에 실패했습니다.",
+      message: result?.message || t("inquiry.sendFail"),
     };
   }
-  return { ok: true, message: String(result?.message || "문의가 정상적으로 전송되었습니다.") };
+  return { ok: true, message: String(result?.message || t("inquiry.sendSuccess")) };
 }
 
 /**

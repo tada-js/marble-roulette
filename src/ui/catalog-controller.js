@@ -1,8 +1,10 @@
 import {
-  BALL_LIBRARY,
+  getBallLibrary,
+  getBallDisplayName,
   buildSystemBallImageDataUrl,
   isSystemBallAvatarUrl,
 } from "../game/assets.ts";
+import { t } from "../i18n/runtime.ts";
 import {
   loadBallsCatalog,
   loadBallCounts,
@@ -31,7 +33,7 @@ export function createCatalogController(opts) {
   refreshImages();
 
   function normalizeInitialCatalog(input) {
-    const libById = new Map(BALL_LIBRARY.map((b) => [b.id, b]));
+    const libById = new Map(getBallLibrary().map((b) => [b.id, b]));
     let changed = false;
 
     const next = (Array.isArray(input) ? input : []).map((b) => {
@@ -101,9 +103,10 @@ export function createCatalogController(opts) {
   }
 
   function addNextBall() {
-    if (catalog.length >= BALL_LIBRARY.length) return false;
+    const library = getBallLibrary();
+    if (catalog.length >= library.length) return false;
     const used = new Set(catalog.map((b) => b.id));
-    const nextBall = BALL_LIBRARY.find((b) => !used.has(b.id));
+    const nextBall = library.find((b) => !used.has(b.id));
     if (!nextBall) return false;
     const next = [...catalog, structuredClone(nextBall)];
     saveBallsCatalog(next);
@@ -174,12 +177,57 @@ export function createCatalogController(opts) {
   }
 
   /**
+   * Update system-default names/images to the selected language while preserving custom names.
+   *
+   * @param {"ko" | "en"} language
+   */
+  function relocalizeCatalog(language) {
+    const localizedLibrary = getBallLibrary(language);
+    const libById = new Map(localizedLibrary.map((b) => [b.id, b]));
+    let changed = false;
+
+    const next = catalog.map((item) => {
+      const localized = libById.get(item.id);
+      if (!localized) return item;
+      if (!isSystemBallAvatarUrl(item.imageDataUrl)) return item;
+
+      const isDefaultName =
+        item.name === getBallDisplayName(item.id, "ko") ||
+        item.name === getBallDisplayName(item.id, "en");
+      if (!isDefaultName) return item;
+
+      const localizedName = localized.name;
+      const localizedImageDataUrl = buildSystemBallImageDataUrl({
+        ballId: localized.id,
+        name: localizedName,
+        fallbackImageDataUrl: item.imageDataUrl,
+        tint: typeof item.tint === "string" ? item.tint : localized.tint,
+      });
+
+      if (localizedName === item.name && localizedImageDataUrl === item.imageDataUrl) return item;
+
+      changed = true;
+      return {
+        ...item,
+        name: localizedName,
+        imageDataUrl: localizedImageDataUrl,
+        tint: typeof item.tint === "string" ? item.tint : localized.tint,
+      };
+    });
+
+    if (!changed) return false;
+    saveBallsCatalog(next);
+    setCatalog(next);
+    return true;
+  }
+
+  /**
    * Replace entire catalog from external draft (used by settings "Apply").
    *
    * @param {Array<{id?: unknown; name?: unknown; imageDataUrl?: unknown; tint?: unknown}>} nextInput
    */
   function replaceCatalog(nextInput) {
-    const libById = new Map(BALL_LIBRARY.map((b) => [b.id, b]));
+    const libById = new Map(getBallLibrary().map((b) => [b.id, b]));
     const used = new Set();
     const next = [];
 
@@ -213,7 +261,7 @@ export function createCatalogController(opts) {
     if (!ballId) return null;
     const b = catalog.find((x) => x.id === ballId);
     return {
-      name: b?.name || ballId || "알 수 없는 공",
+      name: b?.name || ballId || t("ball.unknown"),
       img: b?.imageDataUrl || "",
     };
   }
@@ -227,9 +275,10 @@ export function createCatalogController(opts) {
     updateBallName,
     updateBallImage,
     restoreDefaults,
+    relocalizeCatalog,
     replaceCatalog,
-    getCatalogMax: () => BALL_LIBRARY.length,
-    isAtMax: () => catalog.length >= BALL_LIBRARY.length,
+    getCatalogMax: () => getBallLibrary().length,
+    isAtMax: () => catalog.length >= getBallLibrary().length,
     getWinnerPayload,
     notifyCatalogMutated: onCatalogChange,
   };

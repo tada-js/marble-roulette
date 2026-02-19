@@ -1,14 +1,19 @@
-import { DEFAULT_BALLS } from "../game/assets.ts";
+import { getDefaultBalls } from "../game/assets.ts";
+import { getCurrentLanguage } from "../i18n/runtime.ts";
 
 const KEY = "marble-roulette:balls:v1";
 const COUNTS_KEY = "marble-roulette:ball-counts:v1";
 
+function cloneDefaultBalls() {
+  return structuredClone(getDefaultBalls(getCurrentLanguage()));
+}
+
 export function loadBallsCatalog() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return structuredClone(DEFAULT_BALLS);
+    if (!raw) return cloneDefaultBalls();
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return structuredClone(DEFAULT_BALLS);
+    if (!Array.isArray(parsed)) return cloneDefaultBalls();
     const safe = [];
     for (const it of parsed) {
       if (!it || typeof it !== "object") continue;
@@ -22,9 +27,9 @@ export function loadBallsCatalog() {
         tint: typeof it.tint === "string" ? it.tint : "#ffffff"
       });
     }
-    return safe.length ? safe : structuredClone(DEFAULT_BALLS);
+    return safe.length ? safe : cloneDefaultBalls();
   } catch {
-    return structuredClone(DEFAULT_BALLS);
+    return cloneDefaultBalls();
   }
 }
 
@@ -34,7 +39,7 @@ export function saveBallsCatalog(balls) {
 
 export function restoreDefaultBalls() {
   localStorage.removeItem(KEY);
-  return structuredClone(DEFAULT_BALLS);
+  return cloneDefaultBalls();
 }
 
 export function loadBallCounts(ballsCatalog) {

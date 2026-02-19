@@ -1,3 +1,5 @@
+import { t } from "../i18n/runtime";
+
 const UPDATE_TOAST_ID = "pwa-update-toast";
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -28,7 +30,7 @@ function showUpdateToast(registration: SwRegistrationWithWaiting) {
 
   const message = document.createElement("span");
   message.className = "pwaUpdateToast__text";
-  message.textContent = "새 버전이 준비되었습니다.";
+  message.textContent = t("pwa.updateReady");
 
   const actions = document.createElement("div");
   actions.className = "pwaUpdateToast__actions";
@@ -36,13 +38,13 @@ function showUpdateToast(registration: SwRegistrationWithWaiting) {
   const applyButton = document.createElement("button");
   applyButton.type = "button";
   applyButton.className = "pwaUpdateToast__button";
-  applyButton.textContent = "업데이트";
+  applyButton.textContent = t("pwa.update");
   applyButton.addEventListener("click", () => requestSkipWaiting(registration));
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "pwaUpdateToast__button pwaUpdateToast__button--ghost";
-  closeButton.textContent = "닫기";
+  closeButton.textContent = t("common.close");
   closeButton.addEventListener("click", () => removeUpdateToast());
 
   actions.append(applyButton, closeButton);
