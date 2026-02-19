@@ -22,6 +22,56 @@
 - 결과 발표 모달(스핀 연출 + 요약 목록)
 - 모바일/데스크톱 반응형 UI
 
+## 성능 최적화 리포트 (2026-02)
+
+목표:
+- 모바일에서 공 밀집 구간 버벅임 완화
+- 초기 로드 비용 감소 및 UI 안정성 개선
+- 물리/당첨 로직은 유지
+
+아키텍처 변화:
+
+```mermaid
+flowchart LR
+  subgraph Before["Before"]
+    B1["AppShell"] --> B2["ResultModal (static import)"]
+    B3["Renderer.draw"] --> B4["고정 품질 렌더"]
+    B5["Toast"] --> B6["toastify-js"]
+    B7["SW precache"] --> B8["og-image 포함"]
+  end
+
+  subgraph After["After"]
+    A1["AppShell"] --> A2["ResultModal (lazy chunk)"]
+    A3["Renderer.draw"] --> A4["Adaptive Quality Controller"]
+    A4 --> A5["high: 상세 FX"]
+    A4 --> A6["medium/low: 경량 FX"]
+    A7["Toast"] --> A8["경량 DOM Toast"]
+    A9["SW precache"] --> A10["og-image 제외"]
+  end
+```
+
+적용 항목:
+- 렌더러 적응형 품질 제어: 프레임 시간/활성 공 수 기반 자동 강등/복구
+- 중간/저품질에서 레일 네온 효과 경량화
+- 결과 모달 지연 로딩(`React.lazy + Suspense`)
+- 참가자/결과 이미지에 `width/height`, `loading`, `decoding` 힌트 적용
+- 토스트 시스템 경량화(라이브러리 의존 없는 DOM 토스트)
+- 모바일 `backdrop-filter` 비용 완화
+- 서비스워커 precache 축소(OG 이미지 제외)
+
+최근 빌드 결과(`npm run build:vite`):
+- `assets/index-*.js`: 126.27 kB (gzip 41.85 kB)
+- `assets/vendor-*.js`: 192.39 kB (gzip 60.25 kB)
+- `assets/result-modal-*.js`: 8.11 kB (gzip 2.84 kB, 지연 로드)
+- `assets/index-*.css`: 64.35 kB (gzip 12.78 kB)
+
+검증:
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build:vite`
+- `npm run security`
+
 ## Quick Start
 
 요구사항:

@@ -162,12 +162,51 @@ const IMPACT_RING_CAP_BY_QUALITY: Record<RenderQualityLevel, number> = {
   low: 20,
 };
 
+const QUALITY_LEVEL_ORDER: RenderQualityLevel[] = ["low", "medium", "high"];
+const QUALITY_FRAME_SMOOTHING = 0.12;
+const QUALITY_UPGRADE_COOLDOWN_MS = 860;
+
 const FINISH_CINEMA_TRIGGER_Y_FRAC = 0.82;
 const FINISH_CINEMA_ZOOM_IN_MS = 760;
 const FINISH_CINEMA_ZOOM_MIN = 1.15;
 const FINISH_CINEMA_ZOOM_MAX = 1.2;
 const FINISH_CINEMA_SETTLE_MS = 130;
 const FINISH_CINEMA_EXIT_HOLD_MS = 320;
+
+function getQualityLevelRank(level: RenderQualityLevel): number {
+  return QUALITY_LEVEL_ORDER.indexOf(level);
+}
+
+function downgradeQualityLevel(level: RenderQualityLevel, steps = 0): RenderQualityLevel {
+  const rank = getQualityLevelRank(level);
+  if (rank < 0) return level;
+  const nextRank = Math.max(0, rank - Math.max(0, steps | 0));
+  return QUALITY_LEVEL_ORDER[nextRank] || level;
+}
+
+function resolveAdaptiveQualityLevel(params: {
+  baseLevel: RenderQualityLevel;
+  lowPowerViewport: boolean;
+  activeCount: number;
+  avgFrameMs: number;
+}): RenderQualityLevel {
+  const { baseLevel, lowPowerViewport, activeCount, avgFrameMs } = params;
+  let downgradeSteps = 0;
+  const overHighLoad = activeCount >= 90 || avgFrameMs >= 28;
+  const overMediumLoad = activeCount >= 52 || avgFrameMs >= 20;
+
+  if (overHighLoad) downgradeSteps = 2;
+  else if (overMediumLoad) downgradeSteps = 1;
+
+  if (lowPowerViewport) {
+    downgradeSteps = Math.max(downgradeSteps, 1);
+    if (activeCount >= 28 || avgFrameMs >= 18) {
+      downgradeSteps = Math.max(downgradeSteps, 2);
+    }
+  }
+
+  return downgradeQualityLevel(baseLevel, downgradeSteps);
+}
 
 function pickRenderQualityProfile(cssW: number, cssH: number): RenderQualityProfile {
   const area = Math.max(1, cssW * cssH);
@@ -206,11 +245,16 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
   let renderCssH = canvas.clientHeight || canvas.parentElement?.clientHeight || board.worldH;
   let renderPixelRatio = 1;
   let baseScale = 1;
-  let renderQuality = pickRenderQualityProfile(renderCssW, renderCssH);
+  let baseRenderQualityLevel = pickRenderQualityProfile(renderCssW, renderCssH).level;
   let lowPowerViewport = isLowPowerViewport();
-  if (lowPowerViewport && renderQuality.level === "high") {
-    renderQuality = RENDER_QUALITY_PROFILES.medium;
+  if (lowPowerViewport && baseRenderQualityLevel === "high") {
+    baseRenderQualityLevel = "medium";
   }
+  let adaptiveQualityLevel = baseRenderQualityLevel;
+  let renderQuality = RENDER_QUALITY_PROFILES[adaptiveQualityLevel];
+  let lastFrameAtMs = bootMs;
+  let avgFrameMs = 16.67;
+  let lastQualityChangeAtMs = bootMs;
   const hashStr = (s: string): number => {
     // Small deterministic hash for stable per-entity color offsets.
     let h = 2166136261 >>> 0;
@@ -290,11 +334,14 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     const cssH = canvas.clientHeight || canvas.parentElement?.clientHeight || board.worldH;
     renderCssW = cssW;
     renderCssH = cssH;
-    renderQuality = pickRenderQualityProfile(cssW, cssH);
+    baseRenderQualityLevel = pickRenderQualityProfile(cssW, cssH).level;
     lowPowerViewport = isLowPowerViewport();
-    if (lowPowerViewport && renderQuality.level === "high") {
-      renderQuality = RENDER_QUALITY_PROFILES.medium;
+    if (lowPowerViewport && baseRenderQualityLevel === "high") {
+      baseRenderQualityLevel = "medium";
     }
+    adaptiveQualityLevel = baseRenderQualityLevel;
+    renderQuality = RENDER_QUALITY_PROFILES[adaptiveQualityLevel];
+    lastQualityChangeAtMs = performance.now();
     // For tall boards, fit width and use a scrolling camera for Y.
     const s = Math.min(cssW / board.worldW, 1.6);
     baseScale = s;
@@ -311,6 +358,39 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     canvas.width = Math.max(1, Math.floor(cssW * r));
     canvas.height = Math.max(1, Math.floor(cssH * r));
     ctx.setTransform(r, 0, 0, r, 0, 0);
+  }
+
+  function getActiveMarbleCount(state: GameState): number {
+    let activeCount = 0;
+    for (const marble of state.marbles) {
+      if (!marble.done) activeCount += 1;
+    }
+    return activeCount;
+  }
+
+  function syncAdaptiveRenderQuality(activeCount: number, nowMs: number): void {
+    const deltaMs = Math.max(0, nowMs - lastFrameAtMs);
+    lastFrameAtMs = nowMs;
+    if (deltaMs > 0) {
+      avgFrameMs = lerp(avgFrameMs, deltaMs, QUALITY_FRAME_SMOOTHING);
+    }
+
+    const targetLevel = resolveAdaptiveQualityLevel({
+      baseLevel: baseRenderQualityLevel,
+      lowPowerViewport,
+      activeCount,
+      avgFrameMs,
+    });
+    if (targetLevel === adaptiveQualityLevel) return;
+
+    const currentRank = getQualityLevelRank(adaptiveQualityLevel);
+    const targetRank = getQualityLevelRank(targetLevel);
+    const isDowngrade = targetRank < currentRank;
+    if (!isDowngrade && nowMs - lastQualityChangeAtMs < QUALITY_UPGRADE_COOLDOWN_MS) return;
+
+    adaptiveQualityLevel = targetLevel;
+    renderQuality = RENDER_QUALITY_PROFILES[targetLevel];
+    lastQualityChangeAtMs = nowMs;
   }
 
   function worldToScreen(x: number, y: number): { x: number; y: number } {
@@ -996,8 +1076,10 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
 
   function draw(state: GameState, ballsCatalog: BallCatalogItem[], imagesById: Map<string, HTMLImageElement>): void {
     ensureCatalogLookup(ballsCatalog);
-    drawBoardBase(state.t || 0);
     const nowMs = performance.now();
+    const activeCount = getActiveMarbleCount(state);
+    syncAdaptiveRenderQuality(activeCount, nowMs);
+    drawBoardBase(state.t || 0);
     if (state.mode !== "playing" && !state.marbles.length && !state.finished.length) {
       clearRenderFxState();
     }
@@ -1077,8 +1159,7 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
       ctx.save();
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
+      const detailedRails = renderQuality.level === "high";
       for (const e of fixedEntities) {
         if (e.type === "polyline" && Array.isArray(e.points) && e.points.length >= 2) {
           const y0e = e.points[0][1];
@@ -1086,48 +1167,61 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
           if (Math.max(y0e, y1e) < view.cameraY - 200 || Math.min(y0e, y1e) > view.cameraY + view.viewHWorld + 200) {
             continue;
           }
-          // Outer rubber.
-          ctx.shadowColor = "rgba(0,0,0,0.35)";
-          ctx.shadowBlur = 10;
-          ctx.lineWidth = 11;
-          ctx.strokeStyle = "rgba(0,0,0,0.42)";
-          ctx.beginPath();
-          ctx.moveTo(e.points[0][0], e.points[0][1]);
-          for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
-          ctx.stroke();
+          if (detailedRails) {
+            // Outer rubber.
+            ctx.shadowColor = "rgba(0,0,0,0.35)";
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 11;
+            ctx.strokeStyle = "rgba(0,0,0,0.42)";
+            ctx.beginPath();
+            ctx.moveTo(e.points[0][0], e.points[0][1]);
+            for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
+            ctx.stroke();
 
-          // Neon rail: animated RGB sign gradient.
-          const x0 = e.points[0][0];
-          const y0 = e.points[0][1];
-          const x1 = e.points[e.points.length - 1][0];
-          const y1 = e.points[e.points.length - 1][1];
-          const hOff = (hashStr(e.id) % 360) | 0;
-          const h0 = (fxT * 42 + hOff) % 360;
-          const h1 = (h0 + 120) % 360;
-          const h2 = (h0 + 240) % 360;
-          const grad = ctx.createLinearGradient(x0, y0, x1, y1);
-          grad.addColorStop(0, `hsla(${h0}, 100%, 64%, 0.70)`);
-          grad.addColorStop(0.5, `hsla(${h1}, 100%, 64%, 0.70)`);
-          grad.addColorStop(1, `hsla(${h2}, 100%, 64%, 0.70)`);
+            // Neon rail: animated RGB sign gradient.
+            const x0 = e.points[0][0];
+            const y0 = e.points[0][1];
+            const x1 = e.points[e.points.length - 1][0];
+            const y1 = e.points[e.points.length - 1][1];
+            const hOff = (hashStr(e.id) % 360) | 0;
+            const h0 = (fxT * 42 + hOff) % 360;
+            const h1 = (h0 + 120) % 360;
+            const h2 = (h0 + 240) % 360;
+            const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+            grad.addColorStop(0, `hsla(${h0}, 100%, 64%, 0.70)`);
+            grad.addColorStop(0.5, `hsla(${h1}, 100%, 64%, 0.70)`);
+            grad.addColorStop(1, `hsla(${h2}, 100%, 64%, 0.70)`);
 
-          ctx.shadowColor = `hsla(${h0}, 100%, 62%, 0.95)`;
-          ctx.shadowBlur = 24;
-          ctx.lineWidth = 7.5;
-          ctx.strokeStyle = grad;
-          ctx.beginPath();
-          ctx.moveTo(e.points[0][0], e.points[0][1]);
-          for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
-          ctx.stroke();
+            ctx.shadowColor = `hsla(${h0}, 100%, 62%, 0.95)`;
+            ctx.shadowBlur = 24;
+            ctx.lineWidth = 7.5;
+            ctx.strokeStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(e.points[0][0], e.points[0][1]);
+            for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
+            ctx.stroke();
 
-          // Hot highlight for that "pinball rail" punch.
-          ctx.shadowColor = `hsla(${h1}, 100%, 70%, 0.55)`;
-          ctx.shadowBlur = 16;
-          ctx.lineWidth = 3.2;
-          ctx.strokeStyle = "rgba(255,255,255,0.78)";
-          ctx.beginPath();
-          ctx.moveTo(e.points[0][0], e.points[0][1]);
-          for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
-          ctx.stroke();
+            // Hot highlight for that "pinball rail" punch.
+            ctx.shadowColor = `hsla(${h1}, 100%, 70%, 0.55)`;
+            ctx.shadowBlur = 16;
+            ctx.lineWidth = 3.2;
+            ctx.strokeStyle = "rgba(255,255,255,0.78)";
+            ctx.beginPath();
+            ctx.moveTo(e.points[0][0], e.points[0][1]);
+            for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
+            ctx.stroke();
+          } else {
+            // Simplified rails on adaptive medium/low quality (keeps shape, cuts GPU blur cost).
+            ctx.shadowBlur = 0;
+            ctx.lineWidth = renderQuality.level === "medium" ? 5.6 : 4.2;
+            ctx.strokeStyle = renderQuality.level === "medium"
+              ? "rgba(130, 236, 255, 0.58)"
+              : "rgba(130, 236, 255, 0.44)";
+            ctx.beginPath();
+            ctx.moveTo(e.points[0][0], e.points[0][1]);
+            for (let i = 1; i < e.points.length; i++) ctx.lineTo(e.points[i][0], e.points[i][1]);
+            ctx.stroke();
+          }
         }
       }
       ctx.restore();
@@ -1326,10 +1420,6 @@ export function makeRenderer(canvas: HTMLCanvasElement, { board }: { board: Boar
     drawRingFx(slotRipples, nowMs, slotRippleLineWidth, slotRippleAlpha);
 
     // Marbles (pending + active).
-    let activeCount = 0;
-    for (const marble of state.marbles) {
-      if (!marble.done) activeCount += 1;
-    }
     const drawNameLabels =
       renderQuality.nameLabelMaxActive > 0 && activeCount <= renderQuality.nameLabelMaxActive;
 
