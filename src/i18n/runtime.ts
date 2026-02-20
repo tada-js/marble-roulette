@@ -123,6 +123,7 @@ function applyIndexMetadata(language: Language): void {
       name: tWithLanguage(language, "meta.structuredName"),
       alternateName: "Degururu",
       url: "https://degururu.vercel.app/",
+      image: "https://degururu.vercel.app/assets/og-image.png",
       applicationCategory: "GameApplication",
       inLanguage: tWithLanguage(language, "meta.structuredInLanguage"),
       keywords: tWithLanguage(language, "meta.structuredKeywords")
