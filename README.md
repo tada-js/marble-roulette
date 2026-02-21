@@ -4,16 +4,6 @@
 
 - 플레이: [https://degururu.vercel.app/](https://degururu.vercel.app/)
 
-## 접속/이벤트 분석
-
-- `@vercel/analytics` 기반으로 페이지 방문(자동)과 핵심 이벤트를 수집합니다.
-- `PostHog`를 선택적으로 함께 붙여 행동 패턴(퍼널/리텐션/코호트) 분석이 가능합니다.
-- 수집 이벤트:
-  - `game_start`: 게임 시작
-  - `result_open`: 결과 보기 열기(자동/수동)
-  - `result_copy`: 결과 복사
-- 개인정보(이메일/문의 내용/참가자 이름 원문)는 이벤트 payload에 포함하지 않습니다.
-
 ## 게임 한눈에 보기
 
 ![데구르르 플레이 이미지](public/assets/play-img.png)
@@ -39,44 +29,15 @@ npm run dev
 
 브라우저: `http://localhost:5173`
 
-## 문의 API 환경변수 (선택)
+## 접속/이벤트 분석
 
-문의하기 기능을 사용할 경우 설정합니다.
-
-```bash
-cp .env.example .env.local
-```
-
-필수 값:
-- `INQUIRY_TO_EMAIL`
-- `RESEND_API_KEY`
-- `INQUIRY_FROM_EMAIL`
-- `INQUIRY_ALLOWED_ORIGINS`
-
-선택 값(PostHog):
-- `VITE_POSTHOG_KEY`
-- `VITE_POSTHOG_HOST` (기본값: `https://us.i.posthog.com`)
-
-## 품질 검증
-
-```bash
-npm run typecheck
-npm run lint
-npm test --silent
-npm run build:vite
-```
-
-## 배포 (Vercel)
-
-```bash
-vercel deploy -y
-vercel deploy --prod -y
-```
-
-배포 전 체크:
-- `/api/inquiry` 응답 코드(성공/에러) 확인
-- 클라이언트 네트워크 탭에 API 키/수신 이메일 노출 없음 확인
-- 운영 도메인만 `INQUIRY_ALLOWED_ORIGINS`에 등록
+- `@vercel/analytics` 기반으로 페이지 방문(자동)과 핵심 이벤트를 수집합니다.
+- `PostHog`를 선택적으로 함께 붙여 행동 패턴(퍼널/리텐션/코호트) 분석이 가능합니다.
+- 수집 이벤트:
+  - `game_start`: 게임 시작
+  - `result_open`: 결과 보기 열기(자동/수동)
+  - `result_copy`: 결과 복사
+- 개인정보(이메일/문의 내용/참가자 이름 원문)는 이벤트 payload에 포함하지 않습니다.
 
 ## 프로젝트 구조
 
